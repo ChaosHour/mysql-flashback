@@ -16,29 +16,30 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/daiguadaidai/mysql-flashback/services/offline"
-	"github.com/daiguadaidai/mysql-flashback/services/offline_stat"
 	"os"
 
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/services/create"
-	"github.com/daiguadaidai/mysql-flashback/services/execute"
+	"github.com/ChaosHour/mysql-flashback/services/offline"
+	"github.com/ChaosHour/mysql-flashback/services/offline_stat"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/services/create"
+	"github.com/ChaosHour/mysql-flashback/services/execute"
 	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "mysql-flashback",
-	Short: "MySQL flashback 工具",
+	Short: "MySQL flashback tool",
 }
 
-// cerateCmd 是 rootCmd 的一个子命令
+// createCmd is a subcommand of rootCmd
 var createCmd = &cobra.Command{
 	Use:   "create",
-	Short: "生成回滚SQL",
-	Long: `生成回滚的sql. 如下:
+	Short: "Generate rollback SQL",
+	Long: `Generate rollback SQL. As follows:
 Example:
-指定 开始位点 和 结束位点
+Specify start position and end position
 ./mysql-flashback create \
     --start-log-file="mysql-bin.000090" \
     --start-log-pos=0 \
@@ -55,7 +56,7 @@ Example:
     --db-password="root" \
     --match-sql="select * from schema1.table1 where name = 'aa'"
 
-指定 开始位点 和 结束时间
+Specify start position and end time
 ./mysql-flashback create \
     --start-log-file="mysql-bin.000090" \
     --start-log-pos=0 \
@@ -71,7 +72,7 @@ Example:
     --db-password="root" \
     --match-sql="select name, age from schema1.table1 where name = 'aa'"
 
-指定 开始时间 和 结束时间
+Specify start time and end time
 ./mysql-flashback create \
     --start-time="2018-12-14 15:00:00" \
     --end-time="2018-12-17 15:36:58" \
@@ -92,11 +93,11 @@ Example:
 	},
 }
 
-// cerateCmd 是 rootCmd 的一个子命令
+// offlineCmd is a subcommand of rootCmd
 var offlineCmd = &cobra.Command{
 	Use:   "offline",
-	Short: "解析离线binlog, 生成回滚SQL",
-	Long: `解析离线binlog, 生成回滚SQL. 如下:
+	Short: "Parse offline binlog, generate rollback SQL",
+	Long: `Parse offline binlog, generate rollback SQL. As follows:
 Example:
 ./mysql-flashback offline \
     --enable-rollback-insert=true \
@@ -115,11 +116,11 @@ Example:
 	},
 }
 
-// executeCmd 是 rootCmd 的一个子命令
+// executeCmd is a subcommand of rootCmd
 var executeCmd = &cobra.Command{
 	Use:   "execute",
-	Short: "执行sql回滚文件",
-	Long: `倒序执行指定的sql回滚文件. 如下:
+	Short: "Execute SQL rollback file",
+	Long: `Execute the specified SQL rollback file in reverse order. As follows:
 Example:
 ./mysql-flashback execute \
     --filepath="/tmp/test.sql" \
@@ -135,16 +136,16 @@ Example:
 	},
 }
 
-// cerateCmd 是 rootCmd 的一个子命令
+// offlineStatCmd is a subcommand of rootCmd
 var offlineStatCmd = &cobra.Command{
 	Use:   "offline-stat",
-	Short: "解析离线binlog, 统计binlog信息",
-	Long: `解析离线binlog, 统计binlog信息. 如下:
-执行成功后会在当前目录生成 4 个文件
-offline_stat_output/table_stat.txt # 保存表统计信息
-offline_stat_output/thread_stat.txt # 保存线程统计信息
-offline_stat_output/timestamp_stat.txt # 保存时间统计信息(记录的是每个事务执行 BEGIN 的时间)
-offline_stat_output/xid_stat.txt # 保存 xid 统计信息
+	Short: "Parse offline binlog, generate binlog statistics",
+	Long: `Parse offline binlog, generate binlog statistics. As follows:
+After successful execution, 4 files will be generated in the current directory
+offline_stat_output/table_stat.txt # Save table statistics
+offline_stat_output/thread_stat.txt # Save thread statistics
+offline_stat_output/timestamp_stat.txt # Save time statistics (records the time when each transaction executes BEGIN)
+offline_stat_output/xid_stat.txt # Save xid statistics
 
 Example:
 ./mysql-flashback offline-stat \
@@ -176,59 +177,59 @@ func init() {
 var cc *config.CreateConfig
 var cdbc *config.DBConfig
 
-// 添加创建回滚SQL子命令
+// Add create rollback SQL subcommand
 func addCreateCMD() {
 	rootCmd.AddCommand(createCmd)
 	cc = config.NewStartConfig()
-	createCmd.PersistentFlags().StringVar(&cc.StartLogFile, "start-log-file", "", "开始日志文件")
-	createCmd.PersistentFlags().Uint64Var(&cc.StartLogPos, "start-log-pos", 0, "开始日志文件点位")
-	createCmd.PersistentFlags().StringVar(&cc.EndLogFile, "end-log-file", "", "结束日志文件")
-	createCmd.PersistentFlags().Uint64Var(&cc.EndLogPos, "end-log-pos", 0, "结束日志文件点位")
-	createCmd.PersistentFlags().StringVar(&cc.StartTime, "start-time", "", "开始时间")
-	createCmd.PersistentFlags().StringVar(&cc.EndTime, "end-time", "", "结束时间")
-	createCmd.PersistentFlags().StringArrayVar(&cc.RollbackSchemas, "rollback-schema", []string{}, "指定回滚的数据库, 该命令可以指定多个")
-	createCmd.PersistentFlags().StringArrayVar(&cc.RollbackTables, "rollback-table", []string{}, "需要回滚的表, 该命令可以指定多个")
-	createCmd.PersistentFlags().Uint32Var(&cc.ThreadID, "thread-id", 0, "需要rollback的thread id")
-	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackInsert, "enable-rollback-insert", config.ENABLE_ROLLBACK_INSERT, "是否启用回滚 insert")
-	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackUpdate, "enable-rollback-update", config.ENABLE_ROLLBACK_UPDATE, "是否启用回滚 update")
-	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackDelete, "enable-rollback-delete", config.ENABLE_ROLLBACK_DELETE, "是否启用回滚 delete")
-	createCmd.PersistentFlags().StringVar(&cc.SaveDir, "save-dir", "", "相关文件保存的路径")
-	createCmd.PersistentFlags().StringArrayVar(&cc.MatchSqls, "match-sql", []string{}, "使用简单的 SELECT 语句来匹配需要的字段和记录")
+	createCmd.PersistentFlags().StringVar(&cc.StartLogFile, "start-log-file", "", "Start log file")
+	createCmd.PersistentFlags().Uint64Var(&cc.StartLogPos, "start-log-pos", 0, "Start log file position")
+	createCmd.PersistentFlags().StringVar(&cc.EndLogFile, "end-log-file", "", "End log file")
+	createCmd.PersistentFlags().Uint64Var(&cc.EndLogPos, "end-log-pos", 0, "End log file position")
+	createCmd.PersistentFlags().StringVar(&cc.StartTime, "start-time", "", "Start time")
+	createCmd.PersistentFlags().StringVar(&cc.EndTime, "end-time", "", "End time")
+	createCmd.PersistentFlags().StringArrayVar(&cc.RollbackSchemas, "rollback-schema", []string{}, "Specify databases to rollback, this command can specify multiple")
+	createCmd.PersistentFlags().StringArrayVar(&cc.RollbackTables, "rollback-table", []string{}, "Tables to rollback, this command can specify multiple")
+	createCmd.PersistentFlags().Uint32Var(&cc.ThreadID, "thread-id", 0, "Thread id to rollback")
+	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackInsert, "enable-rollback-insert", config.ENABLE_ROLLBACK_INSERT, "Whether to enable rollback insert")
+	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackUpdate, "enable-rollback-update", config.ENABLE_ROLLBACK_UPDATE, "Whether to enable rollback update")
+	createCmd.PersistentFlags().BoolVar(&cc.EnableRollbackDelete, "enable-rollback-delete", config.ENABLE_ROLLBACK_DELETE, "Whether to enable rollback delete")
+	createCmd.PersistentFlags().StringVar(&cc.SaveDir, "save-dir", "", "Path to save related files")
+	createCmd.PersistentFlags().StringArrayVar(&cc.MatchSqls, "match-sql", []string{}, "Use simple SELECT statement to match needed fields and records")
 
 	cdbc = new(config.DBConfig)
-	// 链接的数据库配置
-	createCmd.PersistentFlags().StringVar(&cdbc.Host, "db-host", config.DB_HOST, "数据库host")
-	createCmd.PersistentFlags().IntVar(&cdbc.Port, "db-port", config.DB_PORT, "数据库port")
-	createCmd.PersistentFlags().StringVar(&cdbc.Username, "db-username", config.DB_USERNAME, "数据库用户名")
-	createCmd.PersistentFlags().StringVar(&cdbc.Password, "db-password", config.DB_PASSWORD, "数据库密码")
-	createCmd.PersistentFlags().StringVar(&cdbc.Database, "db-schema", config.DB_SCHEMA, "数据库名称")
-	createCmd.PersistentFlags().StringVar(&cdbc.CharSet, "db-charset", config.DB_CHARSET, "数据库字符集")
-	createCmd.PersistentFlags().IntVar(&cdbc.Timeout, "db-timeout", config.DB_TIMEOUT, "数据库timeout")
-	createCmd.PersistentFlags().IntVar(&cdbc.MaxIdelConns, "db-max-idel-conns", config.DB_MAX_IDEL_CONNS, "数据库最大空闲连接数")
-	createCmd.PersistentFlags().IntVar(&cdbc.MaxOpenConns, "db-max-open-conns", config.DB_MAX_OPEN_CONNS, "数据库最大连接数")
-	createCmd.PersistentFlags().BoolVar(&cdbc.AutoCommit, "db-auto-commit", config.DB_AUTO_COMMIT, "数据库自动提交")
-	createCmd.PersistentFlags().BoolVar(&cdbc.PasswordIsDecrypt, "db-password-is-decrypt", config.DB_PASSWORD_IS_DECRYPT, "数据库密码是否需要解密")
-	createCmd.PersistentFlags().BoolVar(&cdbc.SqlLogBin, "sql-log-bin", config.SQL_LOG_BIN, "执行sql是否记录binlog")
+	// Database connection configuration
+	createCmd.PersistentFlags().StringVar(&cdbc.Host, "db-host", config.DB_HOST, "Database host")
+	createCmd.PersistentFlags().IntVar(&cdbc.Port, "db-port", config.DB_PORT, "Database port")
+	createCmd.PersistentFlags().StringVar(&cdbc.Username, "db-username", config.DB_USERNAME, "Database username")
+	createCmd.PersistentFlags().StringVar(&cdbc.Password, "db-password", config.DB_PASSWORD, "Database password")
+	createCmd.PersistentFlags().StringVar(&cdbc.Database, "db-schema", config.DB_SCHEMA, "Database name")
+	createCmd.PersistentFlags().StringVar(&cdbc.CharSet, "db-charset", config.DB_CHARSET, "Database charset")
+	createCmd.PersistentFlags().IntVar(&cdbc.Timeout, "db-timeout", config.DB_TIMEOUT, "Database timeout")
+	createCmd.PersistentFlags().IntVar(&cdbc.MaxIdelConns, "db-max-idel-conns", config.DB_MAX_IDEL_CONNS, "Database max idle connections")
+	createCmd.PersistentFlags().IntVar(&cdbc.MaxOpenConns, "db-max-open-conns", config.DB_MAX_OPEN_CONNS, "Database max open connections")
+	createCmd.PersistentFlags().BoolVar(&cdbc.AutoCommit, "db-auto-commit", config.DB_AUTO_COMMIT, "Database auto commit")
+	createCmd.PersistentFlags().BoolVar(&cdbc.PasswordIsDecrypt, "db-password-is-decrypt", config.DB_PASSWORD_IS_DECRYPT, "Whether database password needs decryption")
+	createCmd.PersistentFlags().BoolVar(&cdbc.SqlLogBin, "sql-log-bin", config.SQL_LOG_BIN, "Whether executing SQL records binlog")
 }
 
 var offlineCfg *config.OfflineConfig
 
-// 添加离线创建回滚SQL子命令
+// Add offline create rollback SQL subcommand
 func addOfflineCMD() {
 	rootCmd.AddCommand(offlineCmd)
 
 	offlineCfg = config.NewOffileConfig()
-	offlineCmd.PersistentFlags().Uint32Var(&offlineCfg.ThreadID, "thread-id", 0, "需要rollback的thread id")
-	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackInsert, "enable-rollback-insert", config.ENABLE_ROLLBACK_INSERT, "是否启用回滚 insert")
-	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackUpdate, "enable-rollback-update", config.ENABLE_ROLLBACK_UPDATE, "是否启用回滚 update")
-	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackDelete, "enable-rollback-delete", config.ENABLE_ROLLBACK_DELETE, "是否启用回滚 delete")
-	offlineCmd.PersistentFlags().StringVar(&offlineCfg.SaveDir, "save-dir", "", "相关文件保存的路径")
-	offlineCmd.PersistentFlags().StringVar(&offlineCfg.SchemaFile, "schema-file", "", "表结构文件")
-	offlineCmd.PersistentFlags().StringArrayVar(&offlineCfg.MatchSqls, "match-sql", []string{}, "使用简单的 SELECT 语句来匹配需要的字段和记录")
-	offlineCmd.PersistentFlags().StringArrayVar(&offlineCfg.BinlogFiles, "binlog-file", []string{}, "有哪些binlog文件")
+	offlineCmd.PersistentFlags().Uint32Var(&offlineCfg.ThreadID, "thread-id", 0, "Thread id to rollback")
+	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackInsert, "enable-rollback-insert", config.ENABLE_ROLLBACK_INSERT, "Whether to enable rollback insert")
+	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackUpdate, "enable-rollback-update", config.ENABLE_ROLLBACK_UPDATE, "Whether to enable rollback update")
+	offlineCmd.PersistentFlags().BoolVar(&offlineCfg.EnableRollbackDelete, "enable-rollback-delete", config.ENABLE_ROLLBACK_DELETE, "Whether to enable rollback delete")
+	offlineCmd.PersistentFlags().StringVar(&offlineCfg.SaveDir, "save-dir", "", "Path to save related files")
+	offlineCmd.PersistentFlags().StringVar(&offlineCfg.SchemaFile, "schema-file", "", "Table structure file")
+	offlineCmd.PersistentFlags().StringArrayVar(&offlineCfg.MatchSqls, "match-sql", []string{}, "Use simple SELECT statement to match needed fields and records")
+	offlineCmd.PersistentFlags().StringArrayVar(&offlineCfg.BinlogFiles, "binlog-file", []string{}, "Which binlog files")
 }
 
-// 添加创建回滚SQL子命令
+// Add create rollback SQL subcommand
 var ec *config.ExecuteConfig
 var edbc *config.DBConfig
 
@@ -236,32 +237,32 @@ func addExecuteCMD() {
 	rootCmd.AddCommand(executeCmd)
 
 	ec = new(config.ExecuteConfig)
-	executeCmd.PersistentFlags().StringVar(&ec.FilePath, "filepath", "", "指定执行的文件")
-	executeCmd.PersistentFlags().Int64Var(&ec.Paraller, "paraller", config.EXECUTE_PARALLER, "回滚并发数")
+	executeCmd.PersistentFlags().StringVar(&ec.FilePath, "filepath", "", "Specified file to execute")
+	executeCmd.PersistentFlags().Int64Var(&ec.Paraller, "paraller", config.EXECUTE_PARALLER, "Number of rollback parallels")
 
 	edbc = new(config.DBConfig)
-	// 链接的数据库配置
-	executeCmd.PersistentFlags().StringVar(&edbc.Host, "db-host", "", "数据库host")
-	executeCmd.PersistentFlags().IntVar(&edbc.Port, "db-port", -1, "数据库port")
-	executeCmd.PersistentFlags().StringVar(&edbc.Username, "db-username", "", "数据库用户名")
-	executeCmd.PersistentFlags().StringVar(&edbc.Password, "db-password", "", "数据库密码")
-	executeCmd.PersistentFlags().StringVar(&edbc.Database, "db-schema", "", "数据库名称")
-	executeCmd.PersistentFlags().StringVar(&edbc.CharSet, "db-charset", config.DB_CHARSET, "数据库字符集")
-	executeCmd.PersistentFlags().IntVar(&edbc.Timeout, "db-timeout", config.DB_TIMEOUT, "数据库timeout")
-	executeCmd.PersistentFlags().IntVar(&edbc.MaxIdelConns, "db-max-idel-conns", config.DB_MAX_IDEL_CONNS, "数据库最大空闲连接数")
-	executeCmd.PersistentFlags().IntVar(&edbc.MaxOpenConns, "db-max-open-conns", config.DB_MAX_OPEN_CONNS, "数据库最大连接数")
-	executeCmd.PersistentFlags().BoolVar(&edbc.AutoCommit, "db-auto-commit", config.DB_AUTO_COMMIT, "数据库自动提交")
-	executeCmd.PersistentFlags().BoolVar(&edbc.PasswordIsDecrypt, "db-password-is-decrypt", config.DB_PASSWORD_IS_DECRYPT, "数据库密码是否需要解密")
-	executeCmd.PersistentFlags().BoolVar(&cdbc.SqlLogBin, "sql-log-bin", config.SQL_LOG_BIN, "执行sql是否记录binlog")
+	// Database connection configuration
+	executeCmd.PersistentFlags().StringVar(&edbc.Host, "db-host", "", "Database host")
+	executeCmd.PersistentFlags().IntVar(&edbc.Port, "db-port", -1, "Database port")
+	executeCmd.PersistentFlags().StringVar(&edbc.Username, "db-username", "", "Database username")
+	executeCmd.PersistentFlags().StringVar(&edbc.Password, "db-password", "", "Database password")
+	executeCmd.PersistentFlags().StringVar(&edbc.Database, "db-schema", "", "Database name")
+	executeCmd.PersistentFlags().StringVar(&edbc.CharSet, "db-charset", config.DB_CHARSET, "Database charset")
+	executeCmd.PersistentFlags().IntVar(&edbc.Timeout, "db-timeout", config.DB_TIMEOUT, "Database timeout")
+	executeCmd.PersistentFlags().IntVar(&edbc.MaxIdelConns, "db-max-idel-conns", config.DB_MAX_IDEL_CONNS, "Database max idle connections")
+	executeCmd.PersistentFlags().IntVar(&edbc.MaxOpenConns, "db-max-open-conns", config.DB_MAX_OPEN_CONNS, "Database max open connections")
+	executeCmd.PersistentFlags().BoolVar(&edbc.AutoCommit, "db-auto-commit", config.DB_AUTO_COMMIT, "Database auto commit")
+	executeCmd.PersistentFlags().BoolVar(&edbc.PasswordIsDecrypt, "db-password-is-decrypt", config.DB_PASSWORD_IS_DECRYPT, "Whether database password needs decryption")
+	executeCmd.PersistentFlags().BoolVar(&cdbc.SqlLogBin, "sql-log-bin", config.SQL_LOG_BIN, "Whether executing SQL records binlog")
 }
 
 var offlineStatCfg *config.OfflineStatConfig
 
-// 添加离线创建回滚SQL子命令
+// Add offline create rollback SQL subcommand
 func addOfflineStatCMD() {
 	rootCmd.AddCommand(offlineStatCmd)
 
 	offlineStatCfg = new(config.OfflineStatConfig)
-	offlineStatCmd.PersistentFlags().StringArrayVar(&offlineStatCfg.BinlogFiles, "binlog-file", []string{}, "有哪些binlog文件")
-	offlineStatCmd.PersistentFlags().StringVar(&offlineStatCfg.SaveDir, "save-dir", config.DefaultOfflineStatSaveDir, "统计信息保存目录")
+	offlineStatCmd.PersistentFlags().StringArrayVar(&offlineStatCfg.BinlogFiles, "binlog-file", []string{}, "Which binlog files")
+	offlineStatCmd.PersistentFlags().StringVar(&offlineStatCfg.SaveDir, "save-dir", config.DefaultOfflineStatSaveDir, "Statistics save directory")
 }

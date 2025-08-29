@@ -2,18 +2,19 @@ package offline
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/models"
-	"github.com/daiguadaidai/mysql-flashback/schema"
-	"github.com/daiguadaidai/mysql-flashback/utils"
-	"github.com/daiguadaidai/mysql-flashback/visitor"
-	"github.com/go-mysql-org/go-mysql/replication"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/models"
+	"github.com/ChaosHour/mysql-flashback/schema"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/cihub/seelog"
+	"github.com/go-mysql-org/go-mysql/replication"
 )
 
 type OfflineCreator struct {
@@ -79,7 +80,7 @@ func NewOfflineCreator(offlineConfig *config.OfflineConfig, mTables []*visitor.M
 }
 
 // 获取保存原sql文件名
-func (this *OfflineCreator) getSqlFileName(prefix string) string {
+func (o *OfflineCreator) getSqlFileName(prefix string) string {
 	items := make([]string, 0, 1)
 
 	items = append(items, prefix)
@@ -92,108 +93,108 @@ func (this *OfflineCreator) getSqlFileName(prefix string) string {
 	return strings.Join(items, "_")
 }
 
-func (this *OfflineCreator) closeOriChan() {
-	this.chanMU.Lock()
-	if !this.OriRowsEventChanClosed {
-		this.OriRowsEventChanClosed = true
+func (o *OfflineCreator) closeOriChan() {
+	o.chanMU.Lock()
+	if !o.OriRowsEventChanClosed {
+		o.OriRowsEventChanClosed = true
 		seelog.Info("生成原sql通道关闭")
-		close(this.OriRowsEventChan)
+		close(o.OriRowsEventChan)
 	}
-	defer this.chanMU.Unlock()
+	defer o.chanMU.Unlock()
 }
 
-func (this *OfflineCreator) closeRollabckChan() {
-	this.chanMU.Lock()
-	if !this.RollbackRowsEventChanClosed {
-		this.RollbackRowsEventChanClosed = true
-		close(this.RollbackRowsEventChan)
+func (o *OfflineCreator) closeRollabckChan() {
+	o.chanMU.Lock()
+	if !o.RollbackRowsEventChanClosed {
+		o.RollbackRowsEventChanClosed = true
+		close(o.RollbackRowsEventChan)
 		seelog.Info("生成回滚sql通道关闭")
 	}
-	defer this.chanMU.Unlock()
+	defer o.chanMU.Unlock()
 }
 
-func (this *OfflineCreator) quit() {
-	this.chanMU.Lock()
-	if !this.Quited {
-		this.Quited = true
-		close(this.Qiut)
+func (o *OfflineCreator) quit() {
+	o.chanMU.Lock()
+	if !o.Quited {
+		o.Quited = true
+		close(o.Qiut)
 	}
-	defer this.chanMU.Unlock()
+	defer o.chanMU.Unlock()
 }
 
-func (this *OfflineCreator) Start() error {
+func (o *OfflineCreator) Start() error {
 	wg := new(sync.WaitGroup)
 
 	wg.Add(1)
-	go this.runProduceEvent(wg)
+	go o.runProduceEvent(wg)
 
 	wg.Add(1)
-	go this.runConsumeEventToOriSQL(wg)
+	go o.runConsumeEventToOriSQL(wg)
 
 	wg.Add(1)
-	go this.runConsumeEventToRollbackSQL(wg)
+	go o.runConsumeEventToRollbackSQL(wg)
 
 	wg.Add(1)
-	go this.loopPrintProgress(wg)
+	go o.loopPrintProgress(wg)
 
 	wg.Wait()
 
 	return nil
 }
 
-func (this *OfflineCreator) runProduceEvent(wg *sync.WaitGroup) {
+func (o *OfflineCreator) runProduceEvent(wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() {
-		this.closeOriChan()
-		this.closeRollabckChan()
+		o.closeOriChan()
+		o.closeRollabckChan()
 	}()
-	seelog.Infof("开始解析binlog文件, 一共有 %v 个文件需要进行解析", len(this.OfflineCfg.BinlogFiles))
+	seelog.Infof("开始解析binlog文件, 一共有 %v 个文件需要进行解析", len(o.OfflineCfg.BinlogFiles))
 
 	// 创建一个 BinlogParser 对象
 	parser := replication.NewBinlogParser()
-	for i, binlogFile := range this.OfflineCfg.BinlogFiles {
-		this.CurrentFileIndex = i + 1
-		seelog.Infof("开始解析binlog文件. 进度: %v/%v, binlog文件: %v", this.CurrentFileIndex, len(this.OfflineCfg.BinlogFiles), binlogFile)
-		this.CurrentPosition.File = utils.Filename(binlogFile)
+	for i, binlogFile := range o.OfflineCfg.BinlogFiles {
+		o.CurrentFileIndex = i + 1
+		seelog.Infof("开始解析binlog文件. 进度: %v/%v, binlog文件: %v", o.CurrentFileIndex, len(o.OfflineCfg.BinlogFiles), binlogFile)
+		o.CurrentPosition.File = utils.Filename(binlogFile)
 
 		err := parser.ParseFile(binlogFile, 0, func(event *replication.BinlogEvent) error {
-			if this.Quited {
+			if o.Quited {
 				seelog.Warnf("发现需要退出, 停止产生事件. 文件: %v, pos: %v", binlogFile, event.Header.LogPos)
 				return nil
 			}
-			return this.handleEvent(event)
+			return o.handleEvent(event)
 		})
 		if err != nil {
-			seelog.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(this.OfflineCfg.BinlogFiles), binlogFile, err)
-			this.quit()
+			seelog.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(o.OfflineCfg.BinlogFiles), binlogFile, err)
+			o.quit()
 			return
 		}
 
-		if this.Quited {
+		if o.Quited {
 			return
 		}
 	}
 
 	// 正常完成
 	seelog.Infof("正常完成解析binlog")
-	this.quit()
-	this.Successful = true
+	o.quit()
+	o.Successful = true
 }
 
 // 处理binlog事件
-func (this *OfflineCreator) handleEvent(ev *replication.BinlogEvent) error {
-	this.CurrentPosition.Position = uint64(ev.Header.LogPos) // 设置当前位点
-	this.CurrentTimestamp = ev.Header.Timestamp
+func (o *OfflineCreator) handleEvent(ev *replication.BinlogEvent) error {
+	o.CurrentPosition.Position = uint64(ev.Header.LogPos) // 设置当前位点
+	o.CurrentTimestamp = ev.Header.Timestamp
 
 	switch e := ev.Event.(type) {
 	case *replication.QueryEvent:
-		this.CurrentThreadID = e.SlaveProxyID
+		o.CurrentThreadID = e.SlaveProxyID
 	case *replication.TableMapEvent:
-		if err := this.handleMapEvent(e); err != nil {
+		if err := o.handleMapEvent(e); err != nil {
 			return err
 		}
 	case *replication.RowsEvent:
-		if err := this.produceRowEvent(ev); err != nil {
+		if err := o.produceRowEvent(ev); err != nil {
 			return err
 		}
 	}
@@ -202,17 +203,17 @@ func (this *OfflineCreator) handleEvent(ev *replication.BinlogEvent) error {
 }
 
 // 处理 TableMapEvent
-func (this *OfflineCreator) handleMapEvent(ev *replication.TableMapEvent) error {
-	this.CurrentTable.TableSchema = string(ev.Schema)
-	this.CurrentTable.TableName = string(ev.Table)
+func (o *OfflineCreator) handleMapEvent(ev *replication.TableMapEvent) error {
+	o.CurrentTable.TableSchema = string(ev.Schema)
+	o.CurrentTable.TableName = string(ev.Table)
 
 	return nil
 }
 
 // 产生事件
-func (this *OfflineCreator) produceRowEvent(ev *replication.BinlogEvent) error {
+func (o *OfflineCreator) produceRowEvent(ev *replication.BinlogEvent) error {
 	// 判断是否是指定的 thread id
-	if this.OfflineCfg.ThreadID != 0 && this.OfflineCfg.ThreadID != this.CurrentThreadID {
+	if o.OfflineCfg.ThreadID != 0 && o.OfflineCfg.ThreadID != o.CurrentThreadID {
 		//  指定了 thread id, 但是 event thread id 不等于 指定的 thread id
 		return nil
 	}
@@ -220,52 +221,52 @@ func (this *OfflineCreator) produceRowEvent(ev *replication.BinlogEvent) error {
 	// 判断是否是有过滤相关的event类型
 	switch ev.Header.EventType {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-		if !this.OfflineCfg.EnableRollbackInsert {
+		if !o.OfflineCfg.EnableRollbackInsert {
 			return nil
 		}
 	case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-		if !this.OfflineCfg.EnableRollbackUpdate {
+		if !o.OfflineCfg.EnableRollbackUpdate {
 			return nil
 		}
 	case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-		if !this.OfflineCfg.EnableRollbackDelete {
+		if !o.OfflineCfg.EnableRollbackDelete {
 			return nil
 		}
 	}
 
 	// 判断是否指定表要rollback还是所有表要rollback
-	if _, ok := this.RollBackTableMap[this.CurrentTable.String()]; !ok {
+	if _, ok := o.RollBackTableMap[o.CurrentTable.String()]; !ok {
 		return nil
 	}
 
 	customEvent := &models.CustomBinlogEvent{
 		Event:    ev,
-		ThreadId: this.CurrentThreadID,
+		ThreadId: o.CurrentThreadID,
 	}
 
-	this.OriRowsEventChan <- customEvent
-	this.RollbackRowsEventChan <- customEvent
+	o.OriRowsEventChan <- customEvent
+	o.RollbackRowsEventChan <- customEvent
 
 	return nil
 }
 
 // 消费事件并转化为 执行的 sql
-func (this *OfflineCreator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
+func (o *OfflineCreator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.OpenFile(this.OriSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(o.OriSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("打开保存原sql文件失败. %s", this.OriSQLFile)
-		this.quit()
+		seelog.Errorf("打开保存原sql文件失败. %s", o.OriSQLFile)
+		o.quit()
 		return
 	}
 	defer f.Close()
 
-	for ev := range this.OriRowsEventChan {
+	for ev := range o.OriRowsEventChan {
 		switch e := ev.Event.Event.(type) {
 		case *replication.RowsEvent:
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
-			t, ok := this.RollBackTableMap[key]
+			t, ok := o.RollBackTableMap[key]
 			if !ok {
 				seelog.Error("没有获取到表需要回滚的表信息(生成原sql数据的时候) %s.", key)
 				continue
@@ -275,21 +276,21 @@ func (this *OfflineCreator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 
 			switch ev.Event.Header.EventType {
 			case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-				if err := this.writeOriInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeOriInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-				if err := this.writeOriUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeOriUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-				if err := this.writeOriDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeOriDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			}
@@ -298,22 +299,22 @@ func (this *OfflineCreator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 }
 
 // 消费事件并转化为 rollback sql
-func (this *OfflineCreator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
+func (o *OfflineCreator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.OpenFile(this.RollbackSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(o.RollbackSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("打开保存回滚sql文件失败. %s", this.RollbackSQLFile)
-		this.quit()
+		seelog.Errorf("打开保存回滚sql文件失败. %s", o.RollbackSQLFile)
+		o.quit()
 		return
 	}
 	defer f.Close()
 
-	for ev := range this.RollbackRowsEventChan {
+	for ev := range o.RollbackRowsEventChan {
 		switch e := ev.Event.Event.(type) {
 		case *replication.RowsEvent:
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
-			t, ok := this.RollBackTableMap[key]
+			t, ok := o.RollBackTableMap[key]
 			if !ok {
 				seelog.Error("没有获取到表需要回滚的表信息(生成回滚sql数据的时候) %s.", key)
 				continue
@@ -323,21 +324,21 @@ func (this *OfflineCreator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 
 			switch ev.Event.Header.EventType {
 			case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-				if err := this.writeRollbackDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeRollbackDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-				if err := this.writeRollbackUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeRollbackUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-				if err := this.writeRollbackInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := o.writeRollbackInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					o.quit()
 					return
 				}
 			}
@@ -346,7 +347,7 @@ func (this *OfflineCreator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 }
 
 // 生成insert的原生sql并切入文件
-func (this *OfflineCreator) writeOriInsert(
+func (o *OfflineCreator) writeOriInsert(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -379,7 +380,7 @@ func (this *OfflineCreator) writeOriInsert(
 }
 
 // 生成update的原生sql并切入文件
-func (this *OfflineCreator) writeOriUpdate(
+func (o *OfflineCreator) writeOriUpdate(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -404,9 +405,7 @@ func (this *OfflineCreator) writeOriUpdate(
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
-		for i, field := range setUseRow {
-			placeholderValues[i] = field
-		}
+		copy(placeholderValues, setUseRow)
 
 		// 设置获取where子句的值
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
@@ -430,7 +429,7 @@ func (this *OfflineCreator) writeOriUpdate(
 }
 
 // 生成update的原生sql并切入文件
-func (this *OfflineCreator) writeOriDelete(
+func (o *OfflineCreator) writeOriDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -468,7 +467,7 @@ func (this *OfflineCreator) writeOriDelete(
 }
 
 // 生成insert的回滚sql并切入文件
-func (this *OfflineCreator) writeRollbackInsert(
+func (o *OfflineCreator) writeRollbackInsert(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -501,7 +500,7 @@ func (this *OfflineCreator) writeRollbackInsert(
 }
 
 // 生成update的回滚sql并切入文件
-func (this *OfflineCreator) writeRollbackUpdate(
+func (o *OfflineCreator) writeRollbackUpdate(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -526,9 +525,7 @@ func (this *OfflineCreator) writeRollbackUpdate(
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
-		for i, field := range setUseRow {
-			placeholderValues[i] = field
-		}
+		copy(placeholderValues, setUseRow)
 
 		// 设置获取where子句的值
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
@@ -550,7 +547,7 @@ func (this *OfflineCreator) writeRollbackUpdate(
 }
 
 // 生成update的回滚sql并切入文件
-func (this *OfflineCreator) writeRollbackDelete(
+func (o *OfflineCreator) writeRollbackDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -588,24 +585,24 @@ func (this *OfflineCreator) writeRollbackDelete(
 }
 
 // 获取进度信息
-func (this *OfflineCreator) getProgress() string {
-	return fmt.Sprintf("进度: %v/%v. 当前位点: %v", this.CurrentFileIndex, len(this.OfflineCfg.BinlogFiles), this.CurrentPosition.String())
+func (o *OfflineCreator) getProgress() string {
+	return fmt.Sprintf("进度: %v/%v. 当前位点: %v", o.CurrentFileIndex, len(o.OfflineCfg.BinlogFiles), o.CurrentPosition.String())
 }
 
-func (this *OfflineCreator) loopPrintProgress(wg *sync.WaitGroup) {
+func (o *OfflineCreator) loopPrintProgress(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
-		case _, ok := <-this.Qiut:
+		case _, ok := <-o.Qiut:
 			if !ok {
 				seelog.Info("停止打印进度信息")
 			}
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			seelog.Infof(this.getProgress())
+			seelog.Infof(o.getProgress())
 		}
 	}
 }

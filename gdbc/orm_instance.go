@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/config"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 )

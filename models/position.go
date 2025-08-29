@@ -17,16 +17,16 @@ type Position struct {
 	TS                time.Time `gorm:"-"`
 }
 
-func (this *Position) String() string {
-	return fmt.Sprintf("%s:%d", this.File, this.Position)
+func (p *Position) String() string {
+	return fmt.Sprintf("%s:%d", p.File, p.Position)
 }
 
 // 比较两个位点是否一样
-func (this *Position) Equal(other *Position) bool {
-	if this.File != other.File {
+func (p *Position) Equal(other *Position) bool {
+	if p.File != other.File {
 		return false
 	}
-	if this.Position != other.Position {
+	if p.Position != other.Position {
 		return false
 	}
 
@@ -34,23 +34,21 @@ func (this *Position) Equal(other *Position) bool {
 }
 
 // 比较两个位点是否一样
-func (this *Position) LessThan(other *Position) bool {
-	if this.File < other.File {
+func (p *Position) LessThan(other *Position) bool {
+	if p.File < other.File {
 		return true
-	} else if this.File == other.File {
-		if this.Position < other.Position {
+	} else if p.File == other.File {
+		if p.Position < other.Position {
 			return true
 		}
 		return false
 	} else {
 		return false
 	}
-
-	return true
 }
 
-func (this *Position) GetFileNum() int64 {
-	items := strings.Split(this.File, ".")
+func (p *Position) GetFileNum() int64 {
+	items := strings.Split(p.File, ".")
 	numStr := items[len(items)-1]
 	num, err := strconv.ParseInt(numStr, 10, 64)
 	if err != nil {
@@ -59,6 +57,6 @@ func (this *Position) GetFileNum() int64 {
 	return num
 }
 
-func (this *Position) GetTotalNum() int64 {
-	return (this.GetFileNum() * int64(math.MaxUint32)) + int64(this.Position)
+func (p *Position) GetTotalNum() int64 {
+	return (p.GetFileNum() * int64(math.MaxUint32)) + int64(p.Position)
 }

@@ -27,64 +27,64 @@ func NewCalcStack() *CalcStack {
 	}
 }
 
-func (this *CalcStack) PushOrCalc(data interface{}) {
+func (c *CalcStack) PushOrCalc(data interface{}) {
 	switch v := data.(type) {
 	case opcode.Op:
-		this.Calc(v)
+		c.Calc(v)
 	case bool:
-		this.Push(v)
+		c.Push(v)
 	}
 }
 
-func (this *CalcStack) Calc(op opcode.Op) {
-	data, ok := this.Pop()
+func (c *CalcStack) Calc(op opcode.Op) {
+	data, ok := c.Pop()
 	if !ok {
 		return
 	}
 	switch op {
 	case opcode.LogicAnd:
-		this.result = data && this.result
+		c.result = data && c.result
 	case opcode.LogicOr:
-		this.result = data || this.result
+		c.result = data || c.result
 	}
 }
 
-func (this *CalcStack) IsEmpty() bool {
-	return this.isFirst && this.top == nil
+func (c *CalcStack) IsEmpty() bool {
+	return c.isFirst && c.top == nil
 }
 
-func (this *CalcStack) Result() bool {
-	return this.result
+func (c *CalcStack) Result() bool {
+	return c.result
 }
 
-func (this *CalcStack) Push(data bool) {
-	if this.isFirst {
-		this.result = data
-		this.isFirst = false
+func (c *CalcStack) Push(data bool) {
+	if c.isFirst {
+		c.result = data
+		c.isFirst = false
 		return
 	}
-	newNode := NewBoolNode(this.result)
-	this.result = data
-	if this.top == nil { // 空队列
-		this.top = newNode
+	newNode := NewBoolNode(c.result)
+	c.result = data
+	if c.top == nil { // 空队列
+		c.top = newNode
 		return
 	}
 
 	// 非空队列
-	tmpNode := this.top
-	this.top = newNode
+	tmpNode := c.top
+	c.top = newNode
 	newNode.Next = tmpNode
 }
 
-func (this *CalcStack) Pop() (bool, bool) {
+func (c *CalcStack) Pop() (bool, bool) {
 	// 空队列
-	if this.top == nil {
+	if c.top == nil {
 		return false, false
 	}
 
 	// 非空队列
-	data := this.top.Data
-	this.top = this.top.Next
+	data := c.top.Data
+	c.top = c.top.Next
 
 	return data, true
 }

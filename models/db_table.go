@@ -7,8 +7,8 @@ type DBTable struct {
 	TableName   string `gorm:"column:TABLE_NAME"`
 }
 
-func (this *DBTable) String() string {
-	return fmt.Sprintf("%s.%s", this.TableSchema, this.TableName)
+func (d *DBTable) String() string {
+	return fmt.Sprintf("%s.%s", d.TableSchema, d.TableName)
 }
 
 func NewDBTable(schema string, table string) *DBTable {

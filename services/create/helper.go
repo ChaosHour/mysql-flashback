@@ -3,16 +3,17 @@ package create
 import (
 	"context"
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/dao"
-	"github.com/daiguadaidai/mysql-flashback/models"
-	"github.com/daiguadaidai/mysql-flashback/utils"
-	"github.com/daiguadaidai/mysql-flashback/visitor"
-	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/go-mysql-org/go-mysql/replication"
 	"strings"
 	"time"
+
+	"github.com/cihub/seelog"
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/dao"
+	"github.com/ChaosHour/mysql-flashback/models"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 )
 
 // 获取开始的位点信息
@@ -118,7 +119,7 @@ func getSecondEventTimeBySyncer(
 	syncer := replication.NewBinlogSyncer(cfg)
 	defer syncer.Close()
 
-	streamer, err := syncer.StartSync(mysql.Position{logFile, logPos})
+	streamer, err := syncer.StartSync(mysql.Position{Name: logFile, Pos: logPos})
 	if err != nil {
 		return 0, err
 	}
@@ -133,8 +134,6 @@ func getSecondEventTimeBySyncer(
 			return ev.Header.Timestamp, nil
 		}
 	}
-
-	return 0, fmt.Errorf("没有获取到可用的event时间点")
 }
 
 func GetAndGeneraLastEvent() (*models.Position, error) {
@@ -155,7 +154,7 @@ func GetAndGeneraLastEvent() (*models.Position, error) {
 	}
 
 	if err = defaultDao.DropNotExistsTable(); err != nil {
-		return nil, fmt.Errorf("删除不存在的表.生成binlog event失败. %v")
+		return nil, fmt.Errorf("删除不存在的表.生成binlog event失败. %v", err)
 	}
 	return pos1, nil
 }

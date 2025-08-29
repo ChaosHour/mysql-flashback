@@ -14,7 +14,7 @@ import (
 type responseData struct {
 	Status  bool        `form:"status" json:"status"`
 	Message string      `form:"message" json:"message"`
-	Data    interface{} `form:"data" json:data`
+	Data    interface{} `form:"data" json:"data"`
 }
 
 // post访问url

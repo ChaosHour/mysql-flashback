@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/utils"
 	"time"
+
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/cihub/seelog"
 )
 
 const (
@@ -44,41 +45,33 @@ func SetStartConfig(cfg *CreateConfig) {
 	sc = cfg
 }
 
+func GetStartConfig() *CreateConfig {
+	return sc
+}
+
 // 是否有开始位点信息
-func (this *CreateConfig) HaveStartPosInfo() bool {
-	if this.StartLogFile == "" {
-		return false
-	}
-	return true
+func (c *CreateConfig) HaveStartPosInfo() bool {
+	return c.StartLogFile != ""
 }
 
 // 是否所有结束位点信息
-func (this *CreateConfig) HaveEndPosInfo() bool {
-	if this.EndLogFile == "" {
-		return false
-	}
-	return true
+func (c *CreateConfig) HaveEndPosInfo() bool {
+	return c.EndLogFile != ""
 }
 
 // 是否有开始事件
-func (this *CreateConfig) HaveStartTime() bool {
-	if this.StartTime == "" {
-		return false
-	}
-	return true
+func (c *CreateConfig) HaveStartTime() bool {
+	return c.StartTime != ""
 }
 
 // 是否有结束时间
-func (this *CreateConfig) HaveEndTime() bool {
-	if this.EndTime == "" {
-		return false
-	}
-	return true
+func (c *CreateConfig) HaveEndTime() bool {
+	return c.EndTime != ""
 }
 
 // 设置最终的保存文件
-func (this *CreateConfig) GetSaveDir() string {
-	if len(this.SaveDir) == 0 {
+func (c *CreateConfig) GetSaveDir() string {
+	if len(c.SaveDir) == 0 {
 		cmdDir, err := utils.CMDDir()
 		if err != nil {
 			saveDir := fmt.Sprintf("./%s", SAVE_DIR)
@@ -89,61 +82,61 @@ func (this *CreateConfig) GetSaveDir() string {
 		return fmt.Sprintf("%s/%s", cmdDir, SAVE_DIR)
 	}
 
-	return this.SaveDir
+	return c.SaveDir
 }
 
-func (this *CreateConfig) Check() error {
-	if err := this.checkCondition(); err != nil {
+func (c *CreateConfig) Check() error {
+	if err := c.checkCondition(); err != nil {
 		return err
 	}
 
-	if err := utils.CheckAndCreatePath(this.GetSaveDir(), "回滚文件存放路径"); err != nil {
+	if err := utils.CheckAndCreatePath(c.GetSaveDir(), "回滚文件存放路径"); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (this *CreateConfig) checkCondition() error {
-	if this.StartLogFile != "" && this.StartLogPos >= 0 &&
-		this.EndLogFile != "" && this.EndLogPos >= 0 {
-		if !this.StartPosInfoLessThan(this.EndLogFile, this.EndLogPos) {
-			return fmt.Errorf("指定的结束位点 大于 开始位点")
+func (c *CreateConfig) checkCondition() error {
+	if c.StartLogFile != "" &&
+		c.EndLogFile != "" {
+		if !c.StartPosInfoLessThan(c.EndLogFile, c.EndLogPos) {
+			return fmt.Errorf("specified end position is greater than start position")
 		}
 		return nil
-	} else if this.StartLogFile != "" && this.StartLogPos >= 0 &&
-		this.EndTime != "" {
+	} else if c.StartLogFile != "" &&
+		c.EndTime != "" {
 
-		ts, err := utils.StrTime2Int(this.EndTime)
+		ts, err := utils.StrTime2Int(c.EndTime)
 		if err != nil {
-			return fmt.Errorf("指定的结束事件有问题")
+			return fmt.Errorf("specified end time is invalid")
 		}
-		if ts > (this.Now.Unix()) {
-			return fmt.Errorf("指定的时间还没有到来")
+		if ts > (c.Now.Unix()) {
+			return fmt.Errorf("specified time has not yet arrived")
 		}
 		return nil
-	} else if this.StartTime != "" && this.EndLogFile != "" && this.EndLogPos >= 0 {
+	} else if c.StartTime != "" && c.EndLogFile != "" {
 		return nil
-	} else if this.StartTime != "" && this.EndTime != "" {
-		ts, err := utils.StrTime2Int(this.EndTime)
+	} else if c.StartTime != "" && c.EndTime != "" {
+		ts, err := utils.StrTime2Int(c.EndTime)
 		if err != nil {
-			return fmt.Errorf("指定的结束事件有问题")
+			return fmt.Errorf("specified end time is invalid")
 		}
-		if ts > (this.Now.Unix()) {
-			return fmt.Errorf("指定的时间还没有到来")
+		if ts > (c.Now.Unix()) {
+			return fmt.Errorf("specified time has not yet arrived")
 		}
 		return nil
 	}
 
-	return fmt.Errorf("指定的开始位点和结束位点无效")
+	return fmt.Errorf("specified start and end positions are invalid")
 }
 
 // 开始位点小于其他位点
-func (this *CreateConfig) StartPosInfoLessThan(otherStartFile string, otherStartPos uint64) bool {
-	if this.StartLogFile < otherStartFile {
+func (c *CreateConfig) StartPosInfoLessThan(otherStartFile string, otherStartPos uint64) bool {
+	if c.StartLogFile < otherStartFile {
 		return true
-	} else if this.StartLogFile == otherStartFile {
-		if this.StartLogPos < otherStartPos {
+	} else if c.StartLogFile == otherStartFile {
+		if c.StartLogPos < otherStartPos {
 			return true
 		}
 	}
@@ -151,11 +144,11 @@ func (this *CreateConfig) StartPosInfoLessThan(otherStartFile string, otherStart
 }
 
 // 结束位点大于其他位点
-func (this *CreateConfig) EndPostInfoRatherThan(otherEndFile string, otherEndPos uint64) bool {
-	if this.EndLogFile > otherEndFile {
+func (c *CreateConfig) EndPostInfoRatherThan(otherEndFile string, otherEndPos uint64) bool {
+	if c.EndLogFile > otherEndFile {
 		return true
-	} else if this.EndLogFile == otherEndFile {
-		if this.EndLogPos > otherEndPos {
+	} else if c.EndLogFile == otherEndFile {
+		if c.EndLogPos > otherEndPos {
 			return true
 		}
 	}
@@ -163,8 +156,8 @@ func (this *CreateConfig) EndPostInfoRatherThan(otherEndFile string, otherEndPos
 }
 
 // 开始时间小于其他位点
-func (this *CreateConfig) StartTimeLessThan(otherStartTime string) (bool, error) {
-	ts1, err1 := utils.StrTime2Int(this.StartTime)
+func (c *CreateConfig) StartTimeLessThan(otherStartTime string) (bool, error) {
+	ts1, err1 := utils.StrTime2Int(c.StartTime)
 	ts2, err2 := utils.StrTime2Int(otherStartTime)
 	if err1 == nil && err2 == nil {
 		return ts1 < ts2, nil
@@ -174,12 +167,12 @@ func (this *CreateConfig) StartTimeLessThan(otherStartTime string) (bool, error)
 		return false, nil
 	}
 
-	return false, fmt.Errorf("启动配置中的(开始时间)比较出错.. %s. %s", err1.Error(), err2.Error())
+	return false, fmt.Errorf("error comparing start times in configuration.. %s. %s", err1.Error(), err2.Error())
 }
 
 // 结束时间大于其他位点
-func (this *CreateConfig) EndTimeRatherThan(otherEndTime string) (bool, error) {
-	ts1, err1 := utils.StrTime2Int(this.EndTime)
+func (c *CreateConfig) EndTimeRatherThan(otherEndTime string) (bool, error) {
+	ts1, err1 := utils.StrTime2Int(c.EndTime)
 	ts2, err2 := utils.StrTime2Int(otherEndTime)
 	if err1 == nil && err2 == nil {
 		return ts1 > ts2, nil
@@ -189,13 +182,13 @@ func (this *CreateConfig) EndTimeRatherThan(otherEndTime string) (bool, error) {
 		return false, nil
 	}
 
-	return false, fmt.Errorf("启动配置中的(结束时间)比较出错. %s. %s", err1.Error(), err2.Error())
+	return false, fmt.Errorf("error comparing end times in configuration. %s. %s", err1.Error(), err2.Error())
 }
 
-func (this *CreateConfig) StartInfoString() string {
-	return fmt.Sprintf("开始位点: %s:%d. 开始时间: %s", this.StartLogFile, this.StartLogPos, this.StartTime)
+func (c *CreateConfig) StartInfoString() string {
+	return fmt.Sprintf("开始位点: %s:%d. 开始时间: %s", c.StartLogFile, c.StartLogPos, c.StartTime)
 }
 
-func (this *CreateConfig) EndInfoString() string {
-	return fmt.Sprintf("结束位点: %s:%d. 结束时间: %s", this.EndLogFile, this.EndLogPos, this.EndTime)
+func (c *CreateConfig) EndInfoString() string {
+	return fmt.Sprintf("结束位点: %s:%d. 结束时间: %s", c.EndLogFile, c.EndLogPos, c.EndTime)
 }
