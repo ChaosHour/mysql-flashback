@@ -2,8 +2,8 @@ package dao
 
 import (
 	"fmt"
-	"github.com/daiguadaidai/mysql-flashback/gdbc"
-	"github.com/daiguadaidai/mysql-flashback/models"
+	"github.com/ChaosHour/mysql-flashback/gdbc"
+	"github.com/ChaosHour/mysql-flashback/models"
 	"github.com/jinzhu/gorm"
 )
 
@@ -17,32 +17,32 @@ func NewDefaultDao() *DefaultDao {
 	}
 }
 
-func (this *DefaultDao) ShowBinaryLogs() ([]*models.BinaryLog, error) {
+func (d *DefaultDao) ShowBinaryLogs() ([]*models.BinaryLog, error) {
 	sql := `SHOW BINARY LOGS;`
 	var bLogs []*models.BinaryLog
-	if err := this.DB.Raw(sql).Find(&bLogs).Error; err != nil {
+	if err := d.DB.Raw(sql).Find(&bLogs).Error; err != nil {
 		return nil, err
 	}
 	return bLogs, nil
 }
 
-func (this *DefaultDao) ShowMasterStatus() (*models.Position, error) {
+func (d *DefaultDao) ShowMasterStatus() (*models.Position, error) {
 	sql := `SHOW MASTER STATUS`
 	pos := new(models.Position)
-	if err := this.DB.Raw(sql).Scan(pos).Error; err != nil {
+	if err := d.DB.Raw(sql).Scan(pos).Error; err != nil {
 		return nil, err
 	}
 	return pos, nil
 }
 
 // 删除一个不存在的表
-func (this *DefaultDao) DropNotExistsTable() error {
+func (d *DefaultDao) DropNotExistsTable() error {
 	sql := "DROP TABLE IF EXISTS `__gmod__`.`__gmod__`"
-	return this.DB.Raw(sql).Error
+	return d.DB.Raw(sql).Error
 }
 
 // 获取表通过schema
-func (this *DefaultDao) FindTablesBySchema(sName string) ([]*models.DBTable, error) {
+func (d *DefaultDao) FindTablesBySchema(sName string) ([]*models.DBTable, error) {
 	sql := `
     SELECT TABLE_SCHEMA,
         TABLE_NAME
@@ -51,7 +51,7 @@ func (this *DefaultDao) FindTablesBySchema(sName string) ([]*models.DBTable, err
         AND TABLE_SCHEMA = ?
 `
 	var tables []*models.DBTable
-	if err := this.DB.Raw(sql, sName).Find(&tables).Error; err != nil {
+	if err := d.DB.Raw(sql, sName).Find(&tables).Error; err != nil {
 		return nil, err
 	}
 
@@ -59,7 +59,7 @@ func (this *DefaultDao) FindTablesBySchema(sName string) ([]*models.DBTable, err
 }
 
 // 获取表中所有的字段
-func (this *DefaultDao) FindTableColumnNames(sName string, tName string) ([]string, error) {
+func (d *DefaultDao) FindTableColumnNames(sName string, tName string) ([]string, error) {
 	sql := `
     SELECT COLUMN_NAME
     FROM information_schema.COLUMNS
@@ -69,7 +69,7 @@ func (this *DefaultDao) FindTableColumnNames(sName string, tName string) ([]stri
 `
 	var cNames []string
 
-	if err := this.DB.Raw(sql, sName, tName).Pluck("COLUMN_NAME", &cNames).
+	if err := d.DB.Raw(sql, sName, tName).Pluck("COLUMN_NAME", &cNames).
 		Error; err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (this *DefaultDao) FindTableColumnNames(sName string, tName string) ([]stri
 }
 
 // 获取主键字段名
-func (this *DefaultDao) FindTablePKColumnNames(sName string, tName string) ([]string, error) {
+func (d *DefaultDao) FindTablePKColumnNames(sName string, tName string) ([]string, error) {
 	sql := `
     SELECT S.COLUMN_NAME
     FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC
@@ -94,7 +94,7 @@ func (this *DefaultDao) FindTablePKColumnNames(sName string, tName string) ([]st
 
 	var cNames []string
 
-	if err := this.DB.Raw(sql, sName, tName).Pluck("COLUMN_NAME", &cNames).
+	if err := d.DB.Raw(sql, sName, tName).Pluck("COLUMN_NAME", &cNames).
 		Error; err != nil {
 		return nil, err
 	}
@@ -103,8 +103,8 @@ func (this *DefaultDao) FindTablePKColumnNames(sName string, tName string) ([]st
 }
 
 // 获取唯一键字段
-func (this *DefaultDao) FindTableUKColumnNames(sName string, tName string) ([]string, string, error) {
-	ukName, err := this.GetUKName(sName, tName)
+func (d *DefaultDao) FindTableUKColumnNames(sName string, tName string) ([]string, string, error) {
+	ukName, err := d.GetUKName(sName, tName)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return make([]string, 0), "", nil
@@ -125,7 +125,7 @@ func (this *DefaultDao) FindTableUKColumnNames(sName string, tName string) ([]st
 `
 
 	var cNames []string
-	if err := this.DB.Raw(sql, sName, tName, ukName).Pluck("COLUMN_NAME", &cNames).
+	if err := d.DB.Raw(sql, sName, tName, ukName).Pluck("COLUMN_NAME", &cNames).
 		Error; err != nil {
 		return nil, "", err
 	}
@@ -133,7 +133,7 @@ func (this *DefaultDao) FindTableUKColumnNames(sName string, tName string) ([]st
 }
 
 // 获取第一个唯一键
-func (this *DefaultDao) GetUKName(sName string, tName string) (string, error) {
+func (d *DefaultDao) GetUKName(sName string, tName string) (string, error) {
 	sql := `
     SELECT CONSTRAINT_NAME
     FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
@@ -144,7 +144,7 @@ func (this *DefaultDao) GetUKName(sName string, tName string) (string, error) {
 `
 
 	var ukName string
-	if err := this.DB.Raw(sql, sName, tName).Row().Scan(&ukName); err != nil {
+	if err := d.DB.Raw(sql, sName, tName).Row().Scan(&ukName); err != nil {
 		return "", err
 	}
 
@@ -152,13 +152,13 @@ func (this *DefaultDao) GetUKName(sName string, tName string) (string, error) {
 }
 
 // 执行dml
-func (this *DefaultDao) ExecDML(sql string) error {
-	return this.DB.Exec(sql).Error
+func (d *DefaultDao) ExecDML(sql string) error {
+	return d.DB.Exec(sql).Error
 }
 
 // 获取最老和最新的日志位点
-func (this *DefaultDao) GetOldestAndNewestPos() (*models.Position, *models.Position, error) {
-	logs, err := this.ShowBinaryLogs()
+func (d *DefaultDao) GetOldestAndNewestPos() (*models.Position, *models.Position, error) {
+	logs, err := d.ShowBinaryLogs()
 	if err != nil {
 		return nil, nil, err
 	}

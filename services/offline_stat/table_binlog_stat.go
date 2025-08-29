@@ -13,12 +13,12 @@ type BinlogFile struct {
 	StartLogPos  uint32 `json:"start_log_pos"`
 }
 
-func (this *BinlogFile) FilePos() string {
-	return fmt.Sprintf("%v:%v", this.StartLogFile, this.StartLogPos)
+func (b *BinlogFile) FilePos() string {
+	return fmt.Sprintf("%v:%v", b.StartLogFile, b.StartLogPos)
 }
 
-func (this *DmlStat) DmlCount() int {
-	return this.InsertCount + this.UpdateCount + this.DeleteCount
+func (d *DmlStat) DmlCount() int {
+	return d.InsertCount + d.UpdateCount + d.DeleteCount
 }
 
 type TableBinlogStat struct {

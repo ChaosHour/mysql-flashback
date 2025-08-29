@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/ChaosHour/mysql-flashback/utils"
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/utils"
 	"github.com/daiguadaidai/peep"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"strings"
-	"sync"
 )
 
 const (
@@ -43,43 +43,43 @@ type DBConfig struct {
 	SqlLogBin         bool
 }
 
-func (this *DBConfig) GetDataSource() string {
+func (c *DBConfig) GetDataSource() string {
 	var dataSource string
 
-	if this.SqlLogBin {
+	if c.SqlLogBin {
 		dataSource = fmt.Sprintf(
 			"%v:%v@tcp(%v:%v)/%v?charset=%v&allowOldPasswords=%v&timeout=%vs&autocommit=%v&parseTime=True&loc=Local",
-			this.Username,
-			this.GetPassword(),
-			this.Host,
-			this.Port,
-			this.Database,
-			this.CharSet,
-			this.AllowOldPasswords,
-			this.Timeout,
-			this.AutoCommit,
+			c.Username,
+			c.GetPassword(),
+			c.Host,
+			c.Port,
+			c.Database,
+			c.CharSet,
+			c.AllowOldPasswords,
+			c.Timeout,
+			c.AutoCommit,
 		)
 	} else {
 		dataSource = fmt.Sprintf(
 			"%v:%v@tcp(%v:%v)/%v?charset=%v&allowOldPasswords=%v&timeout=%vs&autocommit=%v&parseTime=True&loc=Local&sql_log_bin=%v",
-			this.Username,
-			this.GetPassword(),
-			this.Host,
-			this.Port,
-			this.Database,
-			this.CharSet,
-			this.AllowOldPasswords,
-			this.Timeout,
-			this.AutoCommit,
-			this.SqlLogBin,
+			c.Username,
+			c.GetPassword(),
+			c.Host,
+			c.Port,
+			c.Database,
+			c.CharSet,
+			c.AllowOldPasswords,
+			c.Timeout,
+			c.AutoCommit,
+			c.SqlLogBin,
 		)
 	}
 
 	return dataSource
 }
 
-func (this *DBConfig) Check() error {
-	if strings.TrimSpace(this.Database) == "" {
+func (c *DBConfig) Check() error {
+	if strings.TrimSpace(c.Database) == "" {
 		return fmt.Errorf("数据库不能为空")
 	}
 
@@ -95,28 +95,26 @@ func GetDBConfig() *DBConfig {
 	return dbConfig
 }
 
-func (this *DBConfig) GetSyncerConfig() replication.BinlogSyncerConfig {
+func (c *DBConfig) GetSyncerConfig() replication.BinlogSyncerConfig {
 	return replication.BinlogSyncerConfig{
 		ServerID: utils.RandRangeUint32(100000000, 200000000),
 		Flavor:   "mysql",
-		Host:     this.Host,
-		Port:     uint16(this.Port),
-		User:     this.Username,
-		Password: this.GetPassword(),
+		Host:     c.Host,
+		Port:     uint16(c.Port),
+		User:     c.Username,
+		Password: c.GetPassword(),
 	}
 }
 
 // 获取密码, 有判断是否需要进行解密
-func (this *DBConfig) GetPassword() string {
-	if this.PasswordIsDecrypt {
-		pwd, err := peep.Decrypt(this.Password)
+func (c *DBConfig) GetPassword() string {
+	if c.PasswordIsDecrypt {
+		pwd, err := peep.Decrypt(c.Password)
 		if err != nil {
 			seelog.Warnf("密码解密出错, 将使用未解析串作为密码. %s", err.Error())
-			return this.Password
+			return c.Password
 		}
 		return pwd
 	}
-	return this.Password
+	return c.Password
 }
-
-var configMap sync.Map

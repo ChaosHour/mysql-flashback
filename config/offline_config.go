@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/utils"
 	"strings"
 	"time"
 )
@@ -27,8 +27,8 @@ func NewOffileConfig() *OfflineConfig {
 }
 
 // 设置最终的保存文件
-func (this *OfflineConfig) GetSaveDir() string {
-	if len(this.SaveDir) == 0 {
+func (o *OfflineConfig) GetSaveDir() string {
+	if len(o.SaveDir) == 0 {
 		cmdDir, err := utils.CMDDir()
 		if err != nil {
 			saveDir := fmt.Sprintf("./%s", SAVE_DIR)
@@ -39,27 +39,27 @@ func (this *OfflineConfig) GetSaveDir() string {
 		return fmt.Sprintf("%s/%s", cmdDir, SAVE_DIR)
 	}
 
-	return this.SaveDir
+	return o.SaveDir
 }
 
-func (this *OfflineConfig) Check() error {
-	if err := this.checkCondition(); err != nil {
+func (o *OfflineConfig) Check() error {
+	if err := o.checkCondition(); err != nil {
 		return err
 	}
 
-	if err := utils.CheckAndCreatePath(this.GetSaveDir(), "回滚文件存放路径"); err != nil {
+	if err := utils.CheckAndCreatePath(o.GetSaveDir(), "回滚文件存放路径"); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (this *OfflineConfig) checkCondition() error {
-	if len(this.BinlogFiles) == 0 {
+func (o *OfflineConfig) checkCondition() error {
+	if len(o.BinlogFiles) == 0 {
 		return fmt.Errorf("请输入离线 binlog 文件名以及路径")
 	}
 
-	for _, fileName := range this.BinlogFiles {
+	for _, fileName := range o.BinlogFiles {
 		ok, err := utils.PathExists(fileName)
 		if err != nil {
 			return fmt.Errorf("检测离线 binlog 文件是否存在出错, %v", err)
@@ -69,16 +69,16 @@ func (this *OfflineConfig) checkCondition() error {
 		}
 	}
 
-	if strings.TrimSpace(this.SchemaFile) == "" {
+	if strings.TrimSpace(o.SchemaFile) == "" {
 		return fmt.Errorf("请指定相关表结构文件")
 	}
 
-	ok, err := utils.PathExists(this.SchemaFile)
+	ok, err := utils.PathExists(o.SchemaFile)
 	if err != nil {
 		return fmt.Errorf("检测离线 表结构文件 是否存在出错, %v", err)
 	}
 	if !ok {
-		return fmt.Errorf("表结构文件不存在, %v", this.SchemaFile)
+		return fmt.Errorf("表结构文件不存在, %v", o.SchemaFile)
 	}
 
 	return nil

@@ -3,7 +3,7 @@ package visitor
 import (
 	"fmt"
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/utils"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
 	"strings"
 )
@@ -30,48 +30,48 @@ func NewMatchTable() *MatchTable {
 	}
 }
 
-func (this *MatchTable) Table() string {
-	return fmt.Sprintf("%s.%s", this.SchemaName, this.TableName)
+func (m *MatchTable) Table() string {
+	return fmt.Sprintf("%s.%s", m.SchemaName, m.TableName)
 }
 
 // 是否有开始位点信息
-func (this *MatchTable) HaveStartPosInfo() bool {
-	if strings.TrimSpace(this.StartLogFile) == "" {
+func (m *MatchTable) HaveStartPosInfo() bool {
+	if strings.TrimSpace(m.StartLogFile) == "" {
 		return false
 	}
 	return true
 }
 
 // 是否所有结束位点信息
-func (this *MatchTable) HaveEndPosInfo() bool {
-	if strings.TrimSpace(this.EndLogFile) == "" {
+func (m *MatchTable) HaveEndPosInfo() bool {
+	if strings.TrimSpace(m.EndLogFile) == "" {
 		return false
 	}
 	return true
 }
 
 // 是否有开始事件
-func (this *MatchTable) HaveStartTime() bool {
-	if strings.TrimSpace(this.StartRollBackTime) == "" {
+func (m *MatchTable) HaveStartTime() bool {
+	if strings.TrimSpace(m.StartRollBackTime) == "" {
 		return false
 	}
 	return true
 }
 
 // 是否有结束时间
-func (this *MatchTable) HaveEndTime() bool {
-	if strings.TrimSpace(this.EndRollBackTime) == "" {
+func (m *MatchTable) HaveEndTime() bool {
+	if strings.TrimSpace(m.EndRollBackTime) == "" {
 		return false
 	}
 	return true
 }
 
 // 开始位点小于其他位点
-func (this *MatchTable) StartPosInfoLessThan(other *MatchTable) bool {
-	if this.StartLogFile < other.StartLogFile {
+func (m *MatchTable) StartPosInfoLessThan(other *MatchTable) bool {
+	if m.StartLogFile < other.StartLogFile {
 		return true
-	} else if this.StartLogFile == other.StartLogFile {
-		if this.StartLogPos < other.StartLogPos {
+	} else if m.StartLogFile == other.StartLogFile {
+		if m.StartLogPos < other.StartLogPos {
 			return true
 		}
 	}
@@ -79,11 +79,11 @@ func (this *MatchTable) StartPosInfoLessThan(other *MatchTable) bool {
 }
 
 // 结束位点大于其他位点
-func (this *MatchTable) EndPostInfoRatherThan(other *MatchTable) bool {
-	if this.EndLogFile > other.EndLogFile {
+func (m *MatchTable) EndPostInfoRatherThan(other *MatchTable) bool {
+	if m.EndLogFile > other.EndLogFile {
 		return true
-	} else if this.EndLogFile == other.EndLogFile {
-		if this.EndLogPos > other.EndLogPos {
+	} else if m.EndLogFile == other.EndLogFile {
+		if m.EndLogPos > other.EndLogPos {
 			return true
 		}
 	}
@@ -91,8 +91,8 @@ func (this *MatchTable) EndPostInfoRatherThan(other *MatchTable) bool {
 }
 
 // 开始时间小于其他位点
-func (this *MatchTable) StartTimeLessThan(other *MatchTable) (bool, error) {
-	ts1, err1 := utils.StrTime2Int(this.StartRollBackTime)
+func (m *MatchTable) StartTimeLessThan(other *MatchTable) (bool, error) {
+	ts1, err1 := utils.StrTime2Int(m.StartRollBackTime)
 	ts2, err2 := utils.StrTime2Int(other.StartRollBackTime)
 	if err1 == nil && err2 == nil {
 		return ts1 < ts2, nil
@@ -106,8 +106,8 @@ func (this *MatchTable) StartTimeLessThan(other *MatchTable) (bool, error) {
 }
 
 // 结束时间大于其他位点
-func (this *MatchTable) EndTimeRatherThan(other *MatchTable) (bool, error) {
-	ts1, err1 := utils.StrTime2Int(this.EndRollBackTime)
+func (m *MatchTable) EndTimeRatherThan(other *MatchTable) (bool, error) {
+	ts1, err1 := utils.StrTime2Int(m.EndRollBackTime)
 	ts2, err2 := utils.StrTime2Int(other.EndRollBackTime)
 	if err1 == nil && err2 == nil {
 		return ts1 > ts2, nil
@@ -135,37 +135,37 @@ func NewFilter(col string, op opcode.Op, val interface{}) *Filter {
 	}
 }
 
-func (this *Filter) String() string {
-	return this.Left
+func (f *Filter) String() string {
+	return f.Left
 }
 
-func (this *Filter) Compare(other interface{}) bool {
-	switch this.Op {
+func (f *Filter) Compare(other interface{}) bool {
+	switch f.Op {
 	case opcode.EQ: // ==
-		return utils.Equal(other, this.Right)
+		return utils.Equal(other, f.Right)
 	case opcode.NE: // <>
-		return utils.NotEqual(other, this.Right)
+		return utils.NotEqual(other, f.Right)
 	case opcode.LT: // <
-		return utils.Less(other, this.Right)
+		return utils.Less(other, f.Right)
 	case opcode.LE: // <=
-		return utils.LessEqual(other, this.Right)
+		return utils.LessEqual(other, f.Right)
 	case opcode.GT: // >
-		return utils.Rather(other, this.Right)
+		return utils.Rather(other, f.Right)
 	case opcode.GE: // >=
-		return utils.RatherEqual(other, this.Right)
+		return utils.RatherEqual(other, f.Right)
 	case opcode.IsNull: // is null
 		return utils.IsNull(other)
 	case opcode.In:
-		return this.compareIn(other)
+		return f.compareIn(other)
 	case opcode.NullEQ: // 没有 bewteen 只能使用这个来代替
-		return this.compareBetween(other)
+		return f.compareBetween(other)
 	}
 	return false
 }
 
 // 比较 IN 表达式
-func (this *Filter) compareIn(other interface{}) bool {
-	inElement, ok := this.Right.(*InElement)
+func (f *Filter) compareIn(other interface{}) bool {
+	inElement, ok := f.Right.(*InElement)
 	if !ok {
 		seelog.Warnf("进行 IN 比较, 但是无法转化InElement类型进行比较")
 		return false
@@ -177,8 +177,8 @@ func (this *Filter) compareIn(other interface{}) bool {
 }
 
 // 比较 between ... and ... 表达式
-func (this *Filter) compareBetween(other interface{}) bool {
-	bewteenElement, ok := this.Right.(*BetweenAndElement)
+func (f *Filter) compareBetween(other interface{}) bool {
+	bewteenElement, ok := f.Right.(*BetweenAndElement)
 	if !ok {
 		seelog.Warnf("进行 BEWTEEN ... AND ... 比较, 但是无法转化 BetweenAndElement 类型")
 	}
@@ -218,14 +218,14 @@ func NewInElement(keyType int, not bool) *InElement {
 	}
 }
 
-func (this *InElement) Matched(other interface{}) bool {
-	switch this.KeyType {
+func (i *InElement) Matched(other interface{}) bool {
+	switch i.KeyType {
 	case IN_KEY_TYPE_INT64:
 		key, err := utils.InterfaceToInt64(other)
 		if err != nil {
 			seelog.Warnf("进行 IN 比较但是, 将数据转化为 Int64 出错. 需要转化的值:%v. %s", other, err.Error())
 		}
-		if _, ok := this.Data[key]; !ok {
+		if _, ok := i.Data[key]; !ok {
 			return false
 		}
 		return true
@@ -234,7 +234,7 @@ func (this *InElement) Matched(other interface{}) bool {
 		if err != nil {
 			seelog.Warnf("进行 IN 比较但是, 将数据转化为 Uint64 出错. 需要转化的值:%v. %s", other, err.Error())
 		}
-		if _, ok := this.Data[key]; !ok {
+		if _, ok := i.Data[key]; !ok {
 			return false
 		}
 		return true
@@ -243,12 +243,12 @@ func (this *InElement) Matched(other interface{}) bool {
 		if err != nil {
 			seelog.Warnf("进行 IN 比较但是, 将数据转化为 Float64 出错. 需要转化的值:%v. %s", other, err.Error())
 		}
-		if _, ok := this.Data[key]; !ok {
+		if _, ok := i.Data[key]; !ok {
 			return false
 		}
 	case IN_KEY_TYPE_STR:
 		key := utils.InterfaceToStr(other)
-		if _, ok := this.Data[key]; !ok {
+		if _, ok := i.Data[key]; !ok {
 			return false
 		}
 		return true
@@ -293,8 +293,8 @@ func NewBetweenAndElement(not bool, left interface{}, right interface{}) *Betwee
 	}
 }
 
-func (this *BetweenAndElement) Matched(other interface{}) bool {
-	if utils.RatherEqual(other, this.Left) && utils.LessEqual(other, this.Right) {
+func (b *BetweenAndElement) Matched(other interface{}) bool {
+	if utils.RatherEqual(other, b.Left) && utils.LessEqual(other, b.Right) {
 		return true
 	}
 	return false

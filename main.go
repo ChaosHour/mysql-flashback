@@ -14,7 +14,7 @@
 
 package main
 
-import "github.com/daiguadaidai/mysql-flashback/cmd"
+import "github.com/ChaosHour/mysql-flashback/cmd"
 
 func main() {
 	cmd.Execute()

@@ -20,19 +20,23 @@ func SetExecuteConfig(cfg *ExecuteConfig) {
 	ec = cfg
 }
 
-func (this *ExecuteConfig) Check() error {
-	if err := this.checkCondition(); err != nil {
+func GetExecuteConfig() *ExecuteConfig {
+	return ec
+}
+
+func (e *ExecuteConfig) Check() error {
+	if err := e.checkCondition(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (this *ExecuteConfig) checkCondition() error {
-	if this.Paraller < 1 {
-		this.Paraller = EXECUTE_PARALLER
+func (e *ExecuteConfig) checkCondition() error {
+	if e.Paraller < 1 {
+		e.Paraller = EXECUTE_PARALLER
 	}
 
-	if len(strings.TrimSpace(this.FilePath)) == 0 {
+	if len(strings.TrimSpace(e.FilePath)) == 0 {
 		return fmt.Errorf("请指定需要执行的文件")
 	}
 

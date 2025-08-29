@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/dao"
-	"github.com/daiguadaidai/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/dao"
+	"github.com/ChaosHour/mysql-flashback/utils"
 	"os"
 	"strconv"
 	"strings"
@@ -60,33 +60,33 @@ func NewExecutor(ec *config.ExecuteConfig, dbc *config.DBConfig) *Executor {
 	return executor
 }
 
-func (this *Executor) closeSQLChans() {
-	for _, sqlChan := range this.sqlChans {
+func (e *Executor) closeSQLChans() {
+	for _, sqlChan := range e.sqlChans {
 		close(sqlChan)
 	}
 }
 
-func (this *Executor) Start() error {
-	this.saveInfo(false)
+func (e *Executor) Start() error {
+	e.saveInfo(false)
 
-	go this.loopSaveInfo()
+	go e.loopSaveInfo()
 	wg := new(sync.WaitGroup)
 
 	wg.Add(1)
-	go this.readFile(wg)
+	go e.readFile(wg)
 
-	for i := int64(0); i < this.ec.Paraller; i++ {
+	for i := int64(0); i < e.ec.Paraller; i++ {
 		wg.Add(1)
-		go this.execSQL(wg, this.sqlChans[i], &(this.chanExecNums[i]), i)
+		go e.execSQL(wg, e.sqlChans[i], &(e.chanExecNums[i]), i)
 	}
 
 	wg.Wait()
 
-	if this.EmitSuccess && this.ExecSuccess { // 成功执行
-		this.saveInfo(true)
+	if e.EmitSuccess && e.ExecSuccess { // 成功执行
+		e.saveInfo(true)
 	}
 
-	for i, num := range this.chanExecNums {
+	for i, num := range e.chanExecNums {
 		seelog.Infof("协程 %d, 最后执行的Sql号为: %d", i, num)
 	}
 
@@ -94,19 +94,19 @@ func (this *Executor) Start() error {
 }
 
 // 倒序读取文件
-func (this *Executor) readFile(wg *sync.WaitGroup) {
+func (e *Executor) readFile(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	fileInfo, err := os.Stat(this.ec.FilePath)
+	fileInfo, err := os.Stat(e.ec.FilePath)
 	if err != nil {
-		seelog.Errorf("获取文件信息失败: %s. %v", this.ec.FilePath, err.Error())
-		this.closeSQLChans()
+		seelog.Errorf("获取文件信息失败: %s. %v", e.ec.FilePath, err.Error())
+		e.closeSQLChans()
 		return
 	}
-	f, err := os.Open(this.ec.FilePath)
+	f, err := os.Open(e.ec.FilePath)
 	if err != nil {
-		seelog.Errorf("打开回滚sql文件失败: %s. %v", this.ec.FilePath, err.Error())
-		this.closeSQLChans()
+		seelog.Errorf("打开回滚sql文件失败: %s. %v", e.ec.FilePath, err.Error())
+		e.closeSQLChans()
 		return
 	}
 	defer f.Close()
@@ -118,24 +118,24 @@ func (this *Executor) readFile(wg *sync.WaitGroup) {
 
 	for ; unReadSize >= 0; unReadSize -= defautBufSize {
 		select {
-		case <-this.ctx.Done():
-			this.closeSQLChans()
+		case <-e.ctx.Done():
+			e.closeSQLChans()
 			return
 		default:
 		}
-		if err = this.generalSQL(f, unReadSize, defautBufSize, &part, &lastRecords); err != nil {
-			seelog.Errorf("打开回滚sql文件失败: %s. %v", this.ec.FilePath, err.Error())
-			this.closeSQLChans()
+		if err = e.generalSQL(f, unReadSize, defautBufSize, &part, &lastRecords); err != nil {
+			seelog.Errorf("打开回滚sql文件失败: %s. %v", e.ec.FilePath, err.Error())
+			e.closeSQLChans()
 			return
 		}
 	}
-	this.emitSQL(lastRecords)
-	this.EmitSuccess = true
-	this.closeSQLChans()
+	e.emitSQL(lastRecords)
+	e.EmitSuccess = true
+	e.closeSQLChans()
 }
 
 // 倒序读取每个sql, 算法比较复杂, 要是出错, 我也看不懂了
-func (this *Executor) generalSQL(
+func (e *Executor) generalSQL(
 	f *os.File,
 	unReadSize int64,
 	defautBufSize int64,
@@ -162,7 +162,7 @@ func (this *Executor) generalSQL(
 				if i != int64(len(*part))-1 { // block的最后一个字符不是换行,
 					*lastRecords = append(*lastRecords, string((*part)[i+1:afterIndex]))
 				}
-				this.emitSQL(*lastRecords)
+				e.emitSQL(*lastRecords)
 				*lastRecords = make([]string, 0, 1)
 				afterIndex = i
 				continue
@@ -170,9 +170,9 @@ func (this *Executor) generalSQL(
 
 			// 本次block不是第1次碰到分隔符, 说明block中间有完整的sql
 			if i == int64(len(*part))-1 { // block的最后一个字符是换行,
-				this.emitSQL([]string{string((*part)[i:afterIndex])})
+				e.emitSQL([]string{string((*part)[i:afterIndex])})
 			} else {
-				this.emitSQL([]string{string((*part)[i+1 : afterIndex])})
+				e.emitSQL([]string{string((*part)[i+1 : afterIndex])})
 			}
 			afterIndex = i
 			continue
@@ -195,7 +195,7 @@ func (this *Executor) generalSQL(
 	return nil
 }
 
-func (this *Executor) emitSQL(sqlItems []string) error {
+func (e *Executor) emitSQL(sqlItems []string) error {
 	if len(sqlItems) == 0 {
 		return nil
 	}
@@ -206,17 +206,17 @@ func (this *Executor) emitSQL(sqlItems []string) error {
 	}
 
 	// 获取需要向哪个 chain 进行发送sql
-	slot := this.getSlot(sql, this.ec.Paraller)
+	slot := e.getSlot(sql, e.ec.Paraller)
 
-	this.ParseCount++
+	e.ParseCount++
 
-	sqlContext := NewSqlContext(sql, this.ParseCount)
+	sqlContext := NewSqlContext(sql, e.ParseCount)
 
-	this.sqlChans[slot] <- sqlContext
+	e.sqlChans[slot] <- sqlContext
 	return nil
 }
 
-func (this *Executor) execSQL(wg *sync.WaitGroup, sqlChan chan *SqlContext, sqlExecNum *int64, tag int64) {
+func (e *Executor) execSQL(wg *sync.WaitGroup, sqlChan chan *SqlContext, sqlExecNum *int64, tag int64) {
 	defer wg.Done()
 
 	seelog.Infof("启动第 %d 个指定回滚sql协程", tag)
@@ -226,18 +226,18 @@ func (this *Executor) execSQL(wg *sync.WaitGroup, sqlChan chan *SqlContext, sqlE
 			seelog.Errorf("第%d条sql执行回滚失败. %s. %s", sqlCtx.Tag, sqlCtx.Sql, err.Error())
 		}
 
-		this.IncrCount()
+		e.IncrCount()
 		*sqlExecNum = sqlCtx.Tag
 	}
 
-	this.ExecSuccess = true
+	e.ExecSuccess = true
 }
 
-func (this *Executor) IncrCount() {
-	atomic.AddInt64(&this.ExecCount, 1)
+func (e *Executor) IncrCount() {
+	atomic.AddInt64(&e.ExecCount, 1)
 }
 
-func (this *Executor) getSlot(sql string, mod int64) int64 {
+func (e *Executor) getSlot(sql string, mod int64) int64 {
 	comment := utils.GetSQLStmtHearderComment(&sql)
 	if strings.TrimSpace(comment) == "" {
 		return 0
@@ -264,14 +264,14 @@ func (this *Executor) getSlot(sql string, mod int64) int64 {
 }
 
 // 保存相关数据
-func (this *Executor) saveInfo(complete bool) {
-	progress, progressInfo := this.getProgress(complete)
+func (e *Executor) saveInfo(complete bool) {
+	progress, progressInfo := e.getProgress(complete)
 
 	seelog.Warnf("进度: %f, 进度信息: %s", progress, progressInfo)
 }
 
-func (this *Executor) getProgress(complete bool) (float64, string) {
-	msg := fmt.Sprintf("获取数: %d, 回滚数: %d", this.ParseCount, this.ExecCount)
+func (e *Executor) getProgress(complete bool) (float64, string) {
+	msg := fmt.Sprintf("获取数: %d, 回滚数: %d", e.ParseCount, e.ExecCount)
 	if complete {
 		return 100, msg
 	}
@@ -279,16 +279,16 @@ func (this *Executor) getProgress(complete bool) (float64, string) {
 	return 0, msg
 }
 
-func (this *Executor) loopSaveInfo() {
+func (e *Executor) loopSaveInfo() {
 	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
-		case <-this.ctx.Done():
+		case <-e.ctx.Done():
 			seelog.Info("停止保存进度信息")
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			this.saveInfo(false)
+			e.saveInfo(false)
 		}
 	}
 }

@@ -140,7 +140,7 @@ func ReplaceSqlPlaceHolder(sqlStr string, row []interface{}, crc32 uint32, timeS
 	rs[0] = crc32
 	rs[1] = timeStr
 	rs[2] = threadId
-	for i, _ := range row {
+	for i := range row {
 		rs[i+offset] = "%v"
 	}
 

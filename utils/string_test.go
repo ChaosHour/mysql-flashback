@@ -6,7 +6,10 @@ import (
 )
 
 func TestNowTimestamp(t *testing.T) {
-	NowTimestamp()
+	timestamp := NowTimestamp()
+	if timestamp <= 0 {
+		t.Errorf("NowTimestamp() returned invalid timestamp: %d", timestamp)
+	}
 }
 
 func Test_NewTime(t *testing.T) {

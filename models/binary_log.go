@@ -6,11 +6,11 @@ type BinaryLog struct {
 }
 
 // 比较两个BinaryLog记录是否一样
-func (this *BinaryLog) Equal(other *BinaryLog) bool {
-	if this.LogName != other.LogName {
+func (b *BinaryLog) Equal(other *BinaryLog) bool {
+	if b.LogName != other.LogName {
 		return false
 	}
-	if this.FileSize != other.FileSize {
+	if b.FileSize != other.FileSize {
 		return false
 	}
 

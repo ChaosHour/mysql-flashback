@@ -3,19 +3,20 @@ package create
 import (
 	"context"
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/models"
-	"github.com/daiguadaidai/mysql-flashback/schema"
-	"github.com/daiguadaidai/mysql-flashback/utils"
-	"github.com/daiguadaidai/mysql-flashback/visitor"
-	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/go-mysql-org/go-mysql/replication"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/models"
+	"github.com/ChaosHour/mysql-flashback/schema"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/cihub/seelog"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 )
 
 const (
@@ -159,84 +160,84 @@ func NewFlashback(sc *config.CreateConfig, dbc *config.DBConfig, mTables []*visi
 }
 
 // 保存需要进行rollback的表
-func (this *Creator) cacheRollbackTable(sName string, tName string) error {
+func (c *Creator) cacheRollbackTable(sName string, tName string) error {
 	key := fmt.Sprintf("%s.%s", sName, tName)
 	t, err := schema.NewTable(sName, tName)
 	if err != nil {
 		return err
 	}
 
-	this.RollBackTableMap[key] = t
+	c.RollBackTableMap[key] = t
 
 	return nil
 }
 
-func (this *Creator) closeOriChan() {
-	this.chanMU.Lock()
-	if !this.OriRowsEventChanClosed {
-		this.OriRowsEventChanClosed = true
+func (c *Creator) closeOriChan() {
+	c.chanMU.Lock()
+	if !c.OriRowsEventChanClosed {
+		c.OriRowsEventChanClosed = true
 		seelog.Info("生成原sql通道关闭")
-		close(this.OriRowsEventChan)
+		close(c.OriRowsEventChan)
 	}
-	defer this.chanMU.Unlock()
+	defer c.chanMU.Unlock()
 }
 
-func (this *Creator) closeRollabckChan() {
-	this.chanMU.Lock()
-	if !this.RollbackRowsEventChanClosed {
-		this.RollbackRowsEventChanClosed = true
-		close(this.RollbackRowsEventChan)
+func (c *Creator) closeRollabckChan() {
+	c.chanMU.Lock()
+	if !c.RollbackRowsEventChanClosed {
+		c.RollbackRowsEventChanClosed = true
+		close(c.RollbackRowsEventChan)
 		seelog.Info("生成回滚sql通道关闭")
 	}
-	defer this.chanMU.Unlock()
+	defer c.chanMU.Unlock()
 }
 
-func (this *Creator) quit() {
-	this.chanMU.Lock()
-	if !this.Quited {
-		this.Quited = true
-		close(this.Qiut)
+func (c *Creator) quit() {
+	c.chanMU.Lock()
+	if !c.Quited {
+		c.Quited = true
+		close(c.Qiut)
 	}
-	defer this.chanMU.Unlock()
+	defer c.chanMU.Unlock()
 }
 
-func (this *Creator) Start() error {
+func (c *Creator) Start() error {
 	wg := new(sync.WaitGroup)
 
-	this.saveInfo(false)
+	c.saveInfo(false)
 
 	wg.Add(1)
-	go this.runProduceEvent(wg)
+	go c.runProduceEvent(wg)
 
 	wg.Add(1)
-	go this.runConsumeEventToOriSQL(wg)
+	go c.runConsumeEventToOriSQL(wg)
 
 	wg.Add(1)
-	go this.runConsumeEventToRollbackSQL(wg)
+	go c.runConsumeEventToRollbackSQL(wg)
 
 	wg.Add(1)
-	go this.loopSaveInfo(wg)
+	go c.loopSaveInfo(wg)
 
 	wg.Wait()
 
-	this.saveInfo(true)
+	c.saveInfo(true)
 
 	return nil
 }
 
-func (this *Creator) runProduceEvent(wg *sync.WaitGroup) {
+func (c *Creator) runProduceEvent(wg *sync.WaitGroup) {
 	defer wg.Done()
-	defer this.Syncer.Close()
+	defer c.Syncer.Close()
 
 	// 判断是否需要跳过, 位点
 	var isSkip bool
-	if this.GetStartPosType == START_POS_BY_TIME { // 如果开始位点是通过时间获取的就需要执行跳过
+	if c.GetStartPosType == START_POS_BY_TIME { // 如果开始位点是通过时间获取的就需要执行跳过
 		isSkip = true
 	}
 	seelog.Debugf("是否是需要跳过事件: %v", isSkip)
 
-	pos := mysql.Position{this.StartPosition.File, uint32(this.StartPosition.Position)}
-	streamer, err := this.Syncer.StartSync(pos)
+	pos := mysql.Position{Name: c.StartPosition.File, Pos: uint32(c.StartPosition.Position)}
+	streamer, err := c.Syncer.StartSync(pos)
 	if err != nil {
 		seelog.Error(err.Error())
 		return
@@ -244,7 +245,7 @@ func (this *Creator) runProduceEvent(wg *sync.WaitGroup) {
 produceLoop:
 	for { // 遍历event获取第二个可用的时间戳
 		select {
-		case _, ok := <-this.Qiut:
+		case _, ok := <-c.Qiut:
 			if !ok {
 				seelog.Errorf("停止生成事件")
 				break produceLoop
@@ -253,57 +254,57 @@ produceLoop:
 			ev, err := streamer.GetEvent(context.Background())
 			if err != nil {
 				seelog.Error(err.Error())
-				this.quit()
+				c.quit()
 			}
 
 			// 过去掉还没到开始时间的事件
 			if isSkip {
 				// 判断是否到了开始时间
-				if ev.Header.Timestamp < this.StartTimestamp {
+				if ev.Header.Timestamp < c.StartTimestamp {
 					continue
 				} else {
 					isSkip = false
 					seelog.Infof("停止跳过, 开始生成回滚sql. 时间戳: %d, 时间: %s, 位点: %s:%d", ev.Header.Timestamp,
-						utils.TS2String(int64(ev.Header.Timestamp), utils.TIME_FORMAT), this.StartPosition.File, ev.Header.LogPos)
+						utils.TS2String(int64(ev.Header.Timestamp), utils.TIME_FORMAT), c.StartPosition.File, ev.Header.LogPos)
 				}
 			}
 
-			if err = this.handleEvent(ev); err != nil {
+			if err = c.handleEvent(ev); err != nil {
 				seelog.Error(err.Error())
-				this.quit()
+				c.quit()
 			}
 		}
 	}
 
-	this.closeOriChan()
-	this.closeRollabckChan()
+	c.closeOriChan()
+	c.closeRollabckChan()
 }
 
 // 处理binlog事件
-func (this *Creator) handleEvent(ev *replication.BinlogEvent) error {
-	this.CurrentPosition.Position = uint64(ev.Header.LogPos) // 设置当前位点
-	this.CurrentTimestamp = ev.Header.Timestamp
+func (c *Creator) handleEvent(ev *replication.BinlogEvent) error {
+	c.CurrentPosition.Position = uint64(ev.Header.LogPos) // 设置当前位点
+	c.CurrentTimestamp = ev.Header.Timestamp
 
 	// 判断是否到达了结束位点
-	if err := this.rlEndPos(); err != nil {
+	if err := c.rlEndPos(); err != nil {
 		return err
 	}
 
 	switch e := ev.Event.(type) {
 	case *replication.RotateEvent:
-		this.CurrentPosition.File = string(e.NextLogName)
+		c.CurrentPosition.File = string(e.NextLogName)
 		// 判断是否到达了结束位点
-		if err := this.rlEndPos(); err != nil {
+		if err := c.rlEndPos(); err != nil {
 			return err
 		}
 	case *replication.QueryEvent:
-		this.CurrentThreadID = e.SlaveProxyID
+		c.CurrentThreadID = e.SlaveProxyID
 	case *replication.TableMapEvent:
-		if err := this.handleMapEvent(e); err != nil {
+		if err := c.handleMapEvent(e); err != nil {
 			return err
 		}
 	case *replication.RowsEvent:
-		if err := this.produceRowEvent(ev); err != nil {
+		if err := c.produceRowEvent(ev); err != nil {
 			return err
 		}
 	}
@@ -312,20 +313,20 @@ func (this *Creator) handleEvent(ev *replication.BinlogEvent) error {
 }
 
 // 大于结束位点
-func (this *Creator) rlEndPos() error {
+func (c *Creator) rlEndPos() error {
 	// 判断是否超过了指定位点
-	if this.HaveEndPosition {
-		if this.EndPosition.LessThan(this.CurrentPosition) {
-			this.Successful = true // 代表任务完成
+	if c.HaveEndPosition {
+		if c.EndPosition.LessThan(c.CurrentPosition) {
+			c.Successful = true // 代表任务完成
 			return fmt.Errorf("当前使用位点 %s 已经超过指定的停止位点 %s. 任务停止",
-				this.CurrentPosition.String(), this.EndPosition.String())
+				c.CurrentPosition.String(), c.EndPosition.String())
 		}
-	} else if this.HaveEndTime { // 使用事件是否超过了结束时间
-		if this.EndTimestamp < this.CurrentTimestamp {
-			this.Successful = true // 代表任务完成
+	} else if c.HaveEndTime { // 使用事件是否超过了结束时间
+		if c.EndTimestamp < c.CurrentTimestamp {
+			c.Successful = true // 代表任务完成
 			return fmt.Errorf("当前使用时间 %s 已经超过指定的停止时间 %s. 任务停止",
-				utils.TS2String(int64(this.CurrentTimestamp), utils.TIME_FORMAT),
-				utils.TS2String(int64(this.EndTimestamp), utils.TIME_FORMAT))
+				utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT),
+				utils.TS2String(int64(c.EndTimestamp), utils.TIME_FORMAT))
 		}
 	} else {
 		return fmt.Errorf("没有指定结束时间和结束位点")
@@ -335,14 +336,14 @@ func (this *Creator) rlEndPos() error {
 }
 
 // 处理 TableMapEvent
-func (this *Creator) handleMapEvent(ev *replication.TableMapEvent) error {
-	this.CurrentTable.TableSchema = string(ev.Schema)
-	this.CurrentTable.TableName = string(ev.Table)
+func (c *Creator) handleMapEvent(ev *replication.TableMapEvent) error {
+	c.CurrentTable.TableSchema = string(ev.Schema)
+	c.CurrentTable.TableName = string(ev.Table)
 
 	// 判断是否所有的表都要进行rollback 并且缓存没有缓存的表
-	if this.RollbackType == RollbackAllTable {
-		if _, ok := this.RollBackTableMap[this.CurrentTable.String()]; !ok {
-			if err := this.cacheRollbackTable(this.CurrentTable.TableSchema, this.CurrentTable.TableName); err != nil {
+	if c.RollbackType == RollbackAllTable {
+		if _, ok := c.RollBackTableMap[c.CurrentTable.String()]; !ok {
+			if err := c.cacheRollbackTable(c.CurrentTable.TableSchema, c.CurrentTable.TableName); err != nil {
 				return err
 			}
 		}
@@ -351,9 +352,9 @@ func (this *Creator) handleMapEvent(ev *replication.TableMapEvent) error {
 }
 
 // 产生事件
-func (this *Creator) produceRowEvent(ev *replication.BinlogEvent) error {
+func (c *Creator) produceRowEvent(ev *replication.BinlogEvent) error {
 	// 判断是否是指定的 thread id
-	if this.CC.ThreadID != 0 && this.CC.ThreadID != this.CurrentThreadID {
+	if c.CC.ThreadID != 0 && c.CC.ThreadID != c.CurrentThreadID {
 		//  指定了 thread id, 但是 event thread id 不等于 指定的 thread id
 		return nil
 	}
@@ -361,54 +362,54 @@ func (this *Creator) produceRowEvent(ev *replication.BinlogEvent) error {
 	// 判断是否是有过滤相关的event类型
 	switch ev.Header.EventType {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-		if !this.CC.EnableRollbackInsert {
+		if !c.CC.EnableRollbackInsert {
 			return nil
 		}
 	case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-		if !this.CC.EnableRollbackUpdate {
+		if !c.CC.EnableRollbackUpdate {
 			return nil
 		}
 	case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-		if !this.CC.EnableRollbackDelete {
+		if !c.CC.EnableRollbackDelete {
 			return nil
 		}
 	}
 
 	// 判断是否指定表要rollback还是所有表要rollback
-	if this.RollbackType == RollbackPartialTable {
-		if _, ok := this.RollBackTableMap[this.CurrentTable.String()]; !ok {
+	if c.RollbackType == RollbackPartialTable {
+		if _, ok := c.RollBackTableMap[c.CurrentTable.String()]; !ok {
 			return nil
 		}
 	}
 
 	customEvent := &models.CustomBinlogEvent{
 		Event:    ev,
-		ThreadId: this.CurrentThreadID,
+		ThreadId: c.CurrentThreadID,
 	}
 
-	this.OriRowsEventChan <- customEvent
-	this.RollbackRowsEventChan <- customEvent
+	c.OriRowsEventChan <- customEvent
+	c.RollbackRowsEventChan <- customEvent
 
 	return nil
 }
 
 // 消费事件并转化为 执行的 sql
-func (this *Creator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
+func (c *Creator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.OpenFile(this.OriSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(c.OriSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("打开保存原sql文件失败. %s", this.OriSQLFile)
-		this.quit()
+		seelog.Errorf("打开保存原sql文件失败. %s", c.OriSQLFile)
+		c.quit()
 		return
 	}
 	defer f.Close()
 
-	for ev := range this.OriRowsEventChan {
+	for ev := range c.OriRowsEventChan {
 		switch e := ev.Event.Event.(type) {
 		case *replication.RowsEvent:
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
-			t, ok := this.RollBackTableMap[key]
+			t, ok := c.RollBackTableMap[key]
 			if !ok {
 				seelog.Error("没有获取到表需要回滚的表信息(生成原sql数据的时候) %s.", key)
 				continue
@@ -418,21 +419,21 @@ func (this *Creator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 
 			switch ev.Event.Header.EventType {
 			case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-				if err := this.writeOriInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeOriInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-				if err := this.writeOriUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeOriUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-				if err := this.writeOriDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeOriDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			}
@@ -441,22 +442,22 @@ func (this *Creator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 }
 
 // 消费事件并转化为 rollback sql
-func (this *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
+func (c *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.OpenFile(this.RollbackSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(c.RollbackSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("打开保存回滚sql文件失败. %s", this.RollbackSQLFile)
-		this.quit()
+		seelog.Errorf("打开保存回滚sql文件失败. %s", c.RollbackSQLFile)
+		c.quit()
 		return
 	}
 	defer f.Close()
 
-	for ev := range this.RollbackRowsEventChan {
+	for ev := range c.RollbackRowsEventChan {
 		switch e := ev.Event.Event.(type) {
 		case *replication.RowsEvent:
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
-			t, ok := this.RollBackTableMap[key]
+			t, ok := c.RollBackTableMap[key]
 			if !ok {
 				seelog.Error("没有获取到表需要回滚的表信息(生成回滚sql数据的时候) %s.", key)
 				continue
@@ -466,21 +467,21 @@ func (this *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 
 			switch ev.Event.Header.EventType {
 			case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
-				if err := this.writeRollbackDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeRollbackDelete(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
-				if err := this.writeRollbackUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeRollbackUpdate(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-				if err := this.writeRollbackInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
+				if err := c.writeRollbackInsert(e, f, t, timeStr, ev.ThreadId); err != nil {
 					seelog.Error(err.Error())
-					this.quit()
+					c.quit()
 					return
 				}
 			}
@@ -489,7 +490,7 @@ func (this *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 }
 
 // 生成insert的原生sql并切入文件
-func (this *Creator) writeOriInsert(
+func (c *Creator) writeOriInsert(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -522,7 +523,7 @@ func (this *Creator) writeOriInsert(
 }
 
 // 生成update的原生sql并切入文件
-func (this *Creator) writeOriUpdate(
+func (c *Creator) writeOriUpdate(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -547,9 +548,7 @@ func (this *Creator) writeOriUpdate(
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
-		for i, field := range setUseRow {
-			placeholderValues[i] = field
-		}
+		copy(placeholderValues, setUseRow)
 
 		// 设置获取where子句的值
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
@@ -573,7 +572,7 @@ func (this *Creator) writeOriUpdate(
 }
 
 // 生成update的原生sql并切入文件
-func (this *Creator) writeOriDelete(
+func (c *Creator) writeOriDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -611,7 +610,7 @@ func (this *Creator) writeOriDelete(
 }
 
 // 生成insert的回滚sql并切入文件
-func (this *Creator) writeRollbackInsert(
+func (c *Creator) writeRollbackInsert(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -644,7 +643,7 @@ func (this *Creator) writeRollbackInsert(
 }
 
 // 生成update的回滚sql并切入文件
-func (this *Creator) writeRollbackUpdate(
+func (c *Creator) writeRollbackUpdate(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -669,9 +668,7 @@ func (this *Creator) writeRollbackUpdate(
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
-		for i, field := range setUseRow {
-			placeholderValues[i] = field
-		}
+		copy(placeholderValues, setUseRow)
 
 		// 设置获取where子句的值
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
@@ -693,7 +690,7 @@ func (this *Creator) writeRollbackUpdate(
 }
 
 // 生成update的回滚sql并切入文件
-func (this *Creator) writeRollbackDelete(
+func (c *Creator) writeRollbackDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
 	tbl *schema.Table,
@@ -731,22 +728,22 @@ func (this *Creator) writeRollbackDelete(
 }
 
 // 获取保存原sql文件名
-func (this *Creator) getSqlFileName(prefix string) string {
+func (c *Creator) getSqlFileName(prefix string) string {
 	items := make([]string, 0, 1)
 
-	items = append(items, this.DBC.Host)
-	items = append(items, strconv.FormatInt(int64(this.DBC.Port), 10))
+	items = append(items, c.DBC.Host)
+	items = append(items, strconv.FormatInt(int64(c.DBC.Port), 10))
 	items = append(items, prefix)
 	// 开始位点
-	items = append(items, this.StartPosition.File)
-	items = append(items, strconv.FormatInt(int64(this.StartPosition.Position), 10))
+	items = append(items, c.StartPosition.File)
+	items = append(items, strconv.FormatInt(int64(c.StartPosition.Position), 10))
 
 	// 结束位点或事件
-	if this.HaveEndPosition {
-		items = append(items, this.EndPosition.File)
-		items = append(items, strconv.FormatInt(int64(this.EndPosition.Position), 10))
-	} else if this.HaveEndTime {
-		items = append(items, utils.TS2String(int64(this.EndTimestamp), utils.TIME_FORMAT_FILE_NAME))
+	if c.HaveEndPosition {
+		items = append(items, c.EndPosition.File)
+		items = append(items, strconv.FormatInt(int64(c.EndPosition.Position), 10))
+	} else if c.HaveEndTime {
+		items = append(items, utils.TS2String(int64(c.EndTimestamp), utils.TIME_FORMAT_FILE_NAME))
 	}
 
 	// 添加时间戳
@@ -758,39 +755,39 @@ func (this *Creator) getSqlFileName(prefix string) string {
 }
 
 // 保存相关数据
-func (this *Creator) saveInfo(complete bool) {
-	progress, progressInfo := this.getProgress(complete)
+func (c *Creator) saveInfo(complete bool) {
+	progress, progressInfo := c.getProgress(complete)
 
 	seelog.Warnf("进度: %f, 进度信息: %s", progress, progressInfo)
 }
 
 // 获取进度信息
-func (this *Creator) getProgress(complete bool) (float64, string) {
+func (c *Creator) getProgress(complete bool) (float64, string) {
 	var progress float64
 	var progressInfo string
 	var total int64
 	var current int64
-	if this.HaveEndPosition {
-		total = this.EndPosition.GetTotalNum() - this.StartPosition.GetTotalNum()
-		if this.CurrentPosition.GetTotalNum() == 0 {
+	if c.HaveEndPosition {
+		total = c.EndPosition.GetTotalNum() - c.StartPosition.GetTotalNum()
+		if c.CurrentPosition.GetTotalNum() == 0 {
 			current = 0
 		} else {
-			current = this.CurrentPosition.GetTotalNum() - this.StartPosition.GetTotalNum()
+			current = c.CurrentPosition.GetTotalNum() - c.StartPosition.GetTotalNum()
 		}
-		progressInfo = fmt.Sprintf("开始位点:%s, 当前位点:%s, 结束位点:%s", this.StartPosition.String(), this.CurrentPosition.String(), this.EndPosition.String())
-	} else if this.HaveEndTime {
-		if this.CC.HaveStartTime() { // 有开始时间
-			startTimestamp, err := utils.StrTime2Int(this.CC.StartTime)
+		progressInfo = fmt.Sprintf("开始位点:%s, 当前位点:%s, 结束位点:%s", c.StartPosition.String(), c.CurrentPosition.String(), c.EndPosition.String())
+	} else if c.HaveEndTime {
+		if c.CC.HaveStartTime() { // 有开始时间
+			startTimestamp, err := utils.StrTime2Int(c.CC.StartTime)
 			if err != nil {
 				startTimestamp = 0
 			}
-			total = int64(this.EndTimestamp) - startTimestamp
-			current = int64(this.CurrentTimestamp) - startTimestamp
-			progressInfo = fmt.Sprintf("开始时间:%s, 当前时间:%s, 结束时间:%s", this.CC.StartTime, utils.TS2String(int64(this.CurrentTimestamp), utils.TIME_FORMAT), this.CC.EndTime)
+			total = int64(c.EndTimestamp) - startTimestamp
+			current = int64(c.CurrentTimestamp) - startTimestamp
+			progressInfo = fmt.Sprintf("开始时间:%s, 当前时间:%s, 结束时间:%s", c.CC.StartTime, utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
 		} else { // 没有开始时间
-			total = int64(this.EndTimestamp)
-			current = int64(this.CurrentTimestamp)
-			progressInfo = fmt.Sprintf("开始位点:%s, 当前时间:%s, 结束时间:%s", this.StartPosition.String(), utils.TS2String(int64(this.CurrentTimestamp), utils.TIME_FORMAT), this.CC.EndTime)
+			total = int64(c.EndTimestamp)
+			current = int64(c.CurrentTimestamp)
+			progressInfo = fmt.Sprintf("开始位点:%s, 当前时间:%s, 结束时间:%s", c.StartPosition.String(), utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
 		}
 	} else {
 		seelog.Errorf("无法获取到任务进度, 没有指定结束时间和结束位点")
@@ -811,20 +808,20 @@ func (this *Creator) getProgress(complete bool) (float64, string) {
 	return progress, progressInfo
 }
 
-func (this *Creator) loopSaveInfo(wg *sync.WaitGroup) {
+func (c *Creator) loopSaveInfo(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
-		case _, ok := <-this.Qiut:
+		case _, ok := <-c.Qiut:
 			if !ok {
 				seelog.Info("停止保存进度信息")
 			}
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			this.saveInfo(false)
+			c.saveInfo(false)
 		}
 	}
 }

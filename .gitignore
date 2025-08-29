@@ -18,4 +18,52 @@ rollback_sqls
 mysql-flashback
 
 # add by HH 2023-08-15
+
+# Build artifacts
+mysql-flashback_unix
+coverage.html
+coverage.out
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Environment files
+.env
+.env.local
+
+# Makefile and build files
+Makefile
+
+# Docker Buildx cache
+.docker/
+.dockerignore
+docker-compose.yml
+Dockerfile*
+/tmp/.buildx-cache
+/tmp/.buildx-cache-new
+
+# Environment files
+.env
+.env.local
 offline_stat_output

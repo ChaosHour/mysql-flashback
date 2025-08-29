@@ -2,12 +2,13 @@ package offline_stat
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/config"
-	"github.com/daiguadaidai/mysql-flashback/utils"
-	"github.com/go-mysql-org/go-mysql/replication"
 	"os"
 	"sort"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/cihub/seelog"
+	"github.com/go-mysql-org/go-mysql/replication"
 )
 
 const (
@@ -41,170 +42,170 @@ func NewOfflineStat(cfg *config.OfflineStatConfig) *OfflineStat {
 	}
 }
 
-func (this *OfflineStat) Start() error {
-	for i, binlogFile := range this.OfflineStatCfg.BinlogFiles {
-		this.CurrentLogFile = binlogFile
-		seelog.Infof("开始解析Binlog: %v/%v, binlog文件: %v", i+i, len(this.OfflineStatCfg.BinlogFiles), binlogFile)
+func (o *OfflineStat) Start() error {
+	for i, binlogFile := range o.OfflineStatCfg.BinlogFiles {
+		o.CurrentLogFile = binlogFile
+		seelog.Infof("开始解析Binlog: %v/%v, binlog文件: %v", i+i, len(o.OfflineStatCfg.BinlogFiles), binlogFile)
 
 		// 创建一个 BinlogParser 对象
 		parser := replication.NewBinlogParser()
 		if err := parser.ParseFile(binlogFile, 0, func(event *replication.BinlogEvent) error {
-			return this.handleEvent(event)
+			return o.handleEvent(event)
 		}); err != nil {
-			return fmt.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(this.OfflineStatCfg.BinlogFiles), binlogFile, err)
+			return fmt.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(o.OfflineStatCfg.BinlogFiles), binlogFile, err)
 		}
 	}
 
 	// 将统计信息输出到文件中
-	this.statToFile()
+	o.statToFile()
 
 	return nil
 }
 
 // 处理binlog事件
-func (this *OfflineStat) handleEvent(ev *replication.BinlogEvent) error {
+func (o *OfflineStat) handleEvent(ev *replication.BinlogEvent) error {
 	switch e := ev.Event.(type) {
 	case *replication.XIDEvent:
-		this.handleXIDEvent(e)
+		o.handleXIDEvent(e)
 	case *replication.QueryEvent:
-		this.handleQueryEvent(e, ev)
+		o.handleQueryEvent(e, ev)
 	case *replication.TableMapEvent:
-		this.handleTableMapEvent(e, ev)
+		o.handleTableMapEvent(e)
 	case *replication.RowsEvent:
-		this.handleRowEvent(e, ev)
+		o.handleRowEvent(e, ev)
 	}
 
 	return nil
 }
 
-func (this *OfflineStat) handleXIDEvent(e *replication.XIDEvent) {
-	if this.CurrentTransactionStat == nil {
+func (o *OfflineStat) handleXIDEvent(e *replication.XIDEvent) {
+	if o.CurrentTransactionStat == nil {
 		return
 	}
 
 	// 添加事务统计
-	this.CurrentTransactionStat.Xid = e.XID
-	this.TotalTransactionStats = append(this.TotalTransactionStats, this.CurrentTransactionStat)
+	o.CurrentTransactionStat.Xid = e.XID
+	o.TotalTransactionStats = append(o.TotalTransactionStats, o.CurrentTransactionStat)
 
-	this.CurrentTransactionStat = nil
+	o.CurrentTransactionStat = nil
 }
 
-func (this *OfflineStat) handleQueryEvent(e *replication.QueryEvent, ev *replication.BinlogEvent) {
-	this.CurrentTreadId = e.SlaveProxyID
+func (o *OfflineStat) handleQueryEvent(e *replication.QueryEvent, ev *replication.BinlogEvent) {
+	o.CurrentTreadId = e.SlaveProxyID
 
 	// 遇到 BEGIN
 	if QueryEventBegin == string(e.Query) {
 		// 添加和初始化时间统计
-		if ev.Header.Timestamp != this.CurrentTimestamp {
-			this.CurrentTimestampStat = NewTimestampBinlogStat(ev.Header.Timestamp, this.CurrentLogFile, ev.Header.LogPos)
+		if ev.Header.Timestamp != o.CurrentTimestamp {
+			o.CurrentTimestampStat = NewTimestampBinlogStat(ev.Header.Timestamp, o.CurrentLogFile, ev.Header.LogPos)
 			// 添加时间统计
-			if this.CurrentTimestampStat != nil {
-				this.TotalTimestampStats = append(this.TotalTimestampStats, this.CurrentTimestampStat)
+			if o.CurrentTimestampStat != nil {
+				o.TotalTimestampStats = append(o.TotalTimestampStats, o.CurrentTimestampStat)
 			}
 		}
-		this.CurrentTimestampStat.TxCount += 1
+		o.CurrentTimestampStat.TxCount += 1
 
 		// 初始化事务统计
-		this.CurrentTransactionStat = NewTransactionBinlogStat(ev.Header.Timestamp, this.CurrentLogFile, ev.Header.LogPos)
+		o.CurrentTransactionStat = NewTransactionBinlogStat(ev.Header.Timestamp, o.CurrentLogFile, ev.Header.LogPos)
 
 		// 初始化 threadId
-		threadStat, ok := this.TotalThreadStatMap[e.SlaveProxyID]
+		threadStat, ok := o.TotalThreadStatMap[e.SlaveProxyID]
 		if !ok {
 			threadStat = &ThreadBinlogStat{
 				ThreadId: e.SlaveProxyID,
 			}
-			this.TotalThreadStatMap[e.SlaveProxyID] = threadStat
+			o.TotalThreadStatMap[e.SlaveProxyID] = threadStat
 		}
 		threadStat.AppearCount += 1
 	}
 }
 
-func (this *OfflineStat) handleTableMapEvent(e *replication.TableMapEvent, ev *replication.BinlogEvent) {
-	this.CurrentSchemaName = string(e.Schema)
-	this.CurrentTableName = string(e.Table)
-	table := fmt.Sprintf("%v.%v", this.CurrentSchemaName, this.CurrentTableName)
+func (o *OfflineStat) handleTableMapEvent(e *replication.TableMapEvent) {
+	o.CurrentSchemaName = string(e.Schema)
+	o.CurrentTableName = string(e.Table)
+	table := fmt.Sprintf("%v.%v", o.CurrentSchemaName, o.CurrentTableName)
 
-	tableStat, ok := this.TotalTableStatMap[table]
+	tableStat, ok := o.TotalTableStatMap[table]
 	if !ok {
 		tableStat = &TableBinlogStat{
-			SchemaName: this.CurrentSchemaName,
-			TableName:  this.CurrentTableName,
+			SchemaName: o.CurrentSchemaName,
+			TableName:  o.CurrentTableName,
 		}
 
-		this.TotalTableStatMap[table] = tableStat
+		o.TotalTableStatMap[table] = tableStat
 	}
 
 	// 统计表出现次数
 	tableStat.AppearCount += 1
 }
 
-func (this *OfflineStat) handleRowEvent(e *replication.RowsEvent, ev *replication.BinlogEvent) {
-	table := fmt.Sprintf("%v.%v", this.CurrentSchemaName, this.CurrentTableName)
+func (o *OfflineStat) handleRowEvent(e *replication.RowsEvent, ev *replication.BinlogEvent) {
+	table := fmt.Sprintf("%v.%v", o.CurrentSchemaName, o.CurrentTableName)
 
 	switch ev.Header.EventType {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
 		// 表统计
-		tableStat, ok := this.TotalTableStatMap[table]
+		tableStat, ok := o.TotalTableStatMap[table]
 		if ok {
 			tableStat.InsertCount += len(e.Rows)
 		}
 
 		// 时间统计
-		if this.CurrentTimestampStat != nil {
-			this.CurrentTimestampStat.InsertCount += len(e.Rows)
+		if o.CurrentTimestampStat != nil {
+			o.CurrentTimestampStat.InsertCount += len(e.Rows)
 		}
 
 		// 事务统计
-		if this.CurrentTransactionStat != nil {
-			this.CurrentTransactionStat.InsertCount += len(e.Rows)
+		if o.CurrentTransactionStat != nil {
+			o.CurrentTransactionStat.InsertCount += len(e.Rows)
 		}
 
 		// Thread 统计
-		threadStat, ok := this.TotalThreadStatMap[this.CurrentTreadId]
+		threadStat, ok := o.TotalThreadStatMap[o.CurrentTreadId]
 		if ok {
 			threadStat.InsertCount += len(e.Rows)
 		}
 	case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
 		// 表统计
-		tableStat, ok := this.TotalTableStatMap[table]
+		tableStat, ok := o.TotalTableStatMap[table]
 		if ok {
 			tableStat.UpdateCount += len(e.Rows) / 2
 		}
 
 		// 时间统计
-		if this.CurrentTimestampStat != nil {
-			this.CurrentTimestampStat.UpdateCount += len(e.Rows) / 2
+		if o.CurrentTimestampStat != nil {
+			o.CurrentTimestampStat.UpdateCount += len(e.Rows) / 2
 		}
 
 		// 事务统计
-		if this.CurrentTransactionStat != nil {
-			this.CurrentTransactionStat.UpdateCount += len(e.Rows) / 2
+		if o.CurrentTransactionStat != nil {
+			o.CurrentTransactionStat.UpdateCount += len(e.Rows) / 2
 		}
 
 		// Thread 统计
-		threadStat, ok := this.TotalThreadStatMap[this.CurrentTreadId]
+		threadStat, ok := o.TotalThreadStatMap[o.CurrentTreadId]
 		if ok {
 			threadStat.UpdateCount += len(e.Rows) / 2
 		}
 	case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
 		// 表统计
-		tableStat, ok := this.TotalTableStatMap[table]
+		tableStat, ok := o.TotalTableStatMap[table]
 		if ok {
 			tableStat.DeleteCount += len(e.Rows)
 		}
 
 		// 时间统计
-		if this.CurrentTimestampStat != nil {
-			this.CurrentTimestampStat.DeleteCount += len(e.Rows)
+		if o.CurrentTimestampStat != nil {
+			o.CurrentTimestampStat.DeleteCount += len(e.Rows)
 		}
 
 		// 事务统计
-		if this.CurrentTransactionStat != nil {
-			this.CurrentTransactionStat.DeleteCount += len(e.Rows)
+		if o.CurrentTransactionStat != nil {
+			o.CurrentTransactionStat.DeleteCount += len(e.Rows)
 		}
 
 		// Thread 统计
-		threadStat, ok := this.TotalThreadStatMap[this.CurrentTreadId]
+		threadStat, ok := o.TotalThreadStatMap[o.CurrentTreadId]
 		if ok {
 			threadStat.DeleteCount += len(e.Rows)
 		}
@@ -212,24 +213,24 @@ func (this *OfflineStat) handleRowEvent(e *replication.RowsEvent, ev *replicatio
 }
 
 // 统计信息到文件中
-func (this *OfflineStat) statToFile() {
+func (o *OfflineStat) statToFile() {
 	// 表统计
-	this.tableStatToFile()
+	o.tableStatToFile()
 
 	// thread统计
-	this.threadStatToFile()
+	o.threadStatToFile()
 
 	// 时间统计
-	this.TimestampStatToFile()
+	o.TimestampStatToFile()
 
 	// 事务统计
-	this.XidStatToFile()
+	o.XidStatToFile()
 }
 
 // 表统计信息写入到文件中
-func (this *OfflineStat) tableStatToFile() {
-	stats := make([]*TableBinlogStat, 0, len(this.TotalTableStatMap))
-	for _, stat := range this.TotalTableStatMap {
+func (o *OfflineStat) tableStatToFile() {
+	stats := make([]*TableBinlogStat, 0, len(o.TotalTableStatMap))
+	for _, stat := range o.TotalTableStatMap {
 		stats = append(stats, stat)
 	}
 
@@ -237,7 +238,7 @@ func (this *OfflineStat) tableStatToFile() {
 		return stats[i].DmlCount() > stats[j].DmlCount()
 	})
 
-	filename := this.OfflineStatCfg.TableStatFilePath()
+	filename := o.OfflineStatCfg.TableStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		seelog.Errorf("将(表)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
@@ -254,9 +255,9 @@ func (this *OfflineStat) tableStatToFile() {
 	}
 }
 
-func (this *OfflineStat) threadStatToFile() {
-	stats := make([]*ThreadBinlogStat, 0, len(this.TotalTableStatMap))
-	for _, stat := range this.TotalThreadStatMap {
+func (o *OfflineStat) threadStatToFile() {
+	stats := make([]*ThreadBinlogStat, 0, len(o.TotalTableStatMap))
+	for _, stat := range o.TotalThreadStatMap {
 		stats = append(stats, stat)
 	}
 
@@ -264,7 +265,7 @@ func (this *OfflineStat) threadStatToFile() {
 		return stats[i].DmlCount() > stats[j].DmlCount()
 	})
 
-	filename := this.OfflineStatCfg.ThreadStatFilePath()
+	filename := o.OfflineStatCfg.ThreadStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		seelog.Errorf("将(thread)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
@@ -281,8 +282,8 @@ func (this *OfflineStat) threadStatToFile() {
 	}
 }
 
-func (this *OfflineStat) TimestampStatToFile() {
-	filename := this.OfflineStatCfg.TimestampStatFilePath()
+func (o *OfflineStat) TimestampStatToFile() {
+	filename := o.OfflineStatCfg.TimestampStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		seelog.Errorf("将(时间)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
@@ -290,7 +291,7 @@ func (this *OfflineStat) TimestampStatToFile() {
 	}
 	defer f.Close()
 
-	for _, stat := range this.TotalTimestampStats {
+	for _, stat := range o.TotalTimestampStats {
 		if _, err := f.WriteString(fmt.Sprintf("%v: dml影响行数: %v, insert: %v, update: %v, delete: %v, 事务数: %v, 开始位点: %v\n",
 			utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.TxCount, stat.FilePos())); err != nil {
 			seelog.Errorf("写入(时间)统计信息出错. 文件: %v. %v. 开始位点: %v. %v", filename, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)
@@ -299,8 +300,8 @@ func (this *OfflineStat) TimestampStatToFile() {
 	}
 }
 
-func (this *OfflineStat) XidStatToFile() {
-	filename := this.OfflineStatCfg.TransactionStatFilePath()
+func (o *OfflineStat) XidStatToFile() {
+	filename := o.OfflineStatCfg.TransactionStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		seelog.Errorf("将(xid)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
@@ -308,7 +309,7 @@ func (this *OfflineStat) XidStatToFile() {
 	}
 	defer f.Close()
 
-	for _, stat := range this.TotalTransactionStats {
+	for _, stat := range o.TotalTransactionStats {
 		if _, err := f.WriteString(fmt.Sprintf("Xid: %v \t%v \t dml影响行数: %v, insert: %v, update: %v, delete: %v, 开始位点: %v\n",
 			stat.Xid, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.FilePos())); err != nil {
 			seelog.Errorf("写入(xid)统计信息出错. 文件: %v. Xid: %v, %v. 开始位点: %v. %v", filename, stat.Xid, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)

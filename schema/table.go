@@ -3,10 +3,10 @@ package schema
 import (
 	"fmt"
 	"github.com/cihub/seelog"
-	"github.com/daiguadaidai/mysql-flashback/dao"
-	"github.com/daiguadaidai/mysql-flashback/utils"
-	"github.com/daiguadaidai/mysql-flashback/utils/sql_parser"
-	"github.com/daiguadaidai/mysql-flashback/visitor"
+	"github.com/ChaosHour/mysql-flashback/dao"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/ChaosHour/mysql-flashback/utils/sql_parser"
+	"github.com/ChaosHour/mysql-flashback/visitor"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
 	"strings"
@@ -35,8 +35,8 @@ type Table struct {
 	CalcOp         []interface{}
 }
 
-func (this *Table) String() string {
-	return fmt.Sprintf("%s.%s", this.SchemaName, this.TableName)
+func (t *Table) String() string {
+	return fmt.Sprintf("%s.%s", t.SchemaName, t.TableName)
 }
 
 func NewTable(sName string, tName string) (*Table, error) {
@@ -113,124 +113,124 @@ func getUKColumnNames(createStmtNode *ast.CreateTableStmt) ([]string, PKType) {
 }
 
 // 添加表的所有字段名
-func (this *Table) addColumnNames(dao *dao.DefaultDao) error {
+func (t *Table) addColumnNames(dao *dao.DefaultDao) error {
 	var err error
-	if this.ColumnNames, err = dao.FindTableColumnNames(this.SchemaName, this.TableName); err != nil {
+	if t.ColumnNames, err = dao.FindTableColumnNames(t.SchemaName, t.TableName); err != nil {
 		return err
 	}
 
-	if len(this.ColumnNames) == 0 {
-		return fmt.Errorf("表:%s 没有获取到字段, 请确认指定表是否不存在", this.String())
+	if len(t.ColumnNames) == 0 {
+		return fmt.Errorf("表:%s 没有获取到字段, 请确认指定表是否不存在", t.String())
 	}
 
 	return nil
 }
 
 // 添加主键
-func (this *Table) addPK(dao *dao.DefaultDao) error {
+func (t *Table) addPK(dao *dao.DefaultDao) error {
 	// 获取 主键
-	pkColumnNames, err := dao.FindTablePKColumnNames(this.SchemaName, this.TableName)
+	pkColumnNames, err := dao.FindTablePKColumnNames(t.SchemaName, t.TableName)
 	if err != nil {
 		return fmt.Errorf("获取主键字段名出错. %v", err)
 	}
 	if len(pkColumnNames) > 0 {
-		this.PKColumnNames = pkColumnNames
-		this.PKType = PKTypePK
+		t.PKColumnNames = pkColumnNames
+		t.PKType = PKTypePK
 		return nil
 	}
-	seelog.Warnf("表: %s 没有主键", this.String())
+	seelog.Warnf("表: %s 没有主键", t.String())
 
 	// 获取唯一键做 主键
-	ukColumnNames, ukName, err := dao.FindTableUKColumnNames(this.SchemaName, this.TableName)
+	ukColumnNames, ukName, err := dao.FindTableUKColumnNames(t.SchemaName, t.TableName)
 	if err != nil {
 		return fmt.Errorf("获取唯一键做主键失败. %v", err)
 	}
 	if len(ukColumnNames) > 0 {
-		seelog.Warnf("表: %s 设置唯一键 %s 当作主键", this.String(), ukName)
-		this.PKColumnNames = ukColumnNames
-		this.PKType = PKTypePK
+		seelog.Warnf("表: %s 设置唯一键 %s 当作主键", t.String(), ukName)
+		t.PKColumnNames = ukColumnNames
+		t.PKType = PKTypePK
 		return nil
 	}
-	seelog.Warnf("表: %s 没有唯一键", this.String())
+	seelog.Warnf("表: %s 没有唯一键", t.String())
 
 	// 所有字段为 主键
-	this.PKColumnNames = this.ColumnNames
-	this.PKType = PKTypeAllColumns
-	seelog.Warnf("表: %s 所有字段作为该表的唯一键", this.String())
+	t.PKColumnNames = t.ColumnNames
+	t.PKType = PKTypeAllColumns
+	seelog.Warnf("表: %s 所有字段作为该表的唯一键", t.String())
 
 	return nil
 }
 
 // 初始所有字段的位置
-func (this *Table) initAllColumnPos() {
+func (t *Table) initAllColumnPos() {
 	columnPosMap := make(map[string]int)
-	for pos, name := range this.ColumnNames {
+	for pos, name := range t.ColumnNames {
 		columnPosMap[name] = pos
 	}
-	this.ColumnPosMap = columnPosMap
+	t.ColumnPosMap = columnPosMap
 }
 
 // 初始化使用字段位点
-func (this *Table) initUseColumnPos() {
-	useColumnPos := make([]int, len(this.UseColumnNames))
-	for i, columnName := range this.UseColumnNames {
-		pos, _ := this.ColumnPosMap[columnName]
+func (t *Table) initUseColumnPos() {
+	useColumnPos := make([]int, len(t.UseColumnNames))
+	for i, columnName := range t.UseColumnNames {
+		pos, _ := t.ColumnPosMap[columnName]
 		useColumnPos[i] = pos
 	}
-	this.UseColumnPos = useColumnPos
+	t.UseColumnPos = useColumnPos
 }
 
 // 初始化sql模板
-func (this *Table) InitSQLTemplate() {
-	this.initInsertTemplate()
-	this.initUpdateTemplate()
-	this.initDeleteTemplate()
+func (t *Table) InitSQLTemplate() {
+	t.initInsertTemplate()
+	t.initUpdateTemplate()
+	t.initDeleteTemplate()
 }
 
 // 初始化 insert sql 模板
-func (this *Table) initInsertTemplate() {
+func (t *Table) initInsertTemplate() {
 	template := "/* crc32:%s, %s, threadId:%s */ INSERT INTO `%s`.`%s`(`%s`) VALUES(%s);\n"
-	this.InsertTemplate = fmt.Sprintf(template, "%d", "%s", "%d", this.SchemaName, this.TableName,
-		strings.Join(this.ColumnNames, "`, `"),
-		utils.StrRepeat("%s", len(this.ColumnNames), ", "))
+	t.InsertTemplate = fmt.Sprintf(template, "%d", "%s", "%d", t.SchemaName, t.TableName,
+		strings.Join(t.ColumnNames, "`, `"),
+		utils.StrRepeat("%s", len(t.ColumnNames), ", "))
 }
 
 // 初始化 update sql 模板
-func (this *Table) initUpdateTemplate() {
+func (t *Table) initUpdateTemplate() {
 	template := "/* crc32:%s, %s, threadId:%s */ UPDATE `%s`.`%s` SET %s WHERE %s;\n"
-	this.UpdateTemplate = fmt.Sprintf(template, "%d", "%s", "%d", this.SchemaName, this.TableName,
-		utils.SqlExprPlaceholderByColumns(this.UseColumnNames, "=", "%s", ", "),
-		utils.SqlExprPlaceholderByColumns(this.PKColumnNames, "=", "%s", " AND "))
+	t.UpdateTemplate = fmt.Sprintf(template, "%d", "%s", "%d", t.SchemaName, t.TableName,
+		utils.SqlExprPlaceholderByColumns(t.UseColumnNames, "=", "%s", ", "),
+		utils.SqlExprPlaceholderByColumns(t.PKColumnNames, "=", "%s", " AND "))
 }
 
 // 初始化 delete sql 模板
-func (this *Table) initDeleteTemplate() {
+func (t *Table) initDeleteTemplate() {
 	template := "/* crc32:%s, %s, threadId:%s */ DELETE FROM `%s`.`%s` WHERE %s;\n"
-	this.DeleteTemplate = fmt.Sprintf(template, "%d", "%s", "%d", this.SchemaName, this.TableName,
-		utils.SqlExprPlaceholderByColumns(this.PKColumnNames, "=", "%s", " AND "))
+	t.DeleteTemplate = fmt.Sprintf(template, "%d", "%s", "%d", t.SchemaName, t.TableName,
+		utils.SqlExprPlaceholderByColumns(t.PKColumnNames, "=", "%s", " AND "))
 }
 
-func (this *Table) SetPKValues(row []interface{}, pkValues []interface{}) {
-	for i, v := range this.PKColumnNames {
-		pkValues[i] = row[this.ColumnPosMap[v]]
+func (t *Table) SetPKValues(row []interface{}, pkValues []interface{}) {
+	for i, v := range t.PKColumnNames {
+		pkValues[i] = row[t.ColumnPosMap[v]]
 	}
 }
 
 // 设置 MTableInfo
-func (this *Table) SetMTableInfo(mTable *visitor.MatchTable) error {
+func (t *Table) SetMTableInfo(mTable *visitor.MatchTable) error {
 	// 设置需要的字段
 	if !mTable.AllColumn {
 		useColumnNames := make([]string, len(mTable.ColumnNames))
 		for i, columnName := range mTable.ColumnNames {
-			if _, ok := this.ColumnPosMap[columnName]; !ok {
-				return fmt.Errorf("指定的字段不存在, 请确认. 库:%s, 表:%s, 字段:%s", this.SchemaName, this.TableName, columnName)
+			if _, ok := t.ColumnPosMap[columnName]; !ok {
+				return fmt.Errorf("指定的字段不存在, 请确认. 库:%s, 表:%s, 字段:%s", t.SchemaName, t.TableName, columnName)
 			}
 			useColumnNames[i] = columnName
 		}
 
-		this.UseColumnNames = useColumnNames
-		this.initUseColumnPos() // 初始化使用字段的位点
-		this.InitSQLTemplate()
+		t.UseColumnNames = useColumnNames
+		t.initUseColumnPos() // 初始化使用字段的位点
+		t.InitSQLTemplate()
 	}
 
 	// 添加过滤条件
@@ -238,23 +238,23 @@ func (this *Table) SetMTableInfo(mTable *visitor.MatchTable) error {
 		for _, op := range mTable.CalcOp {
 			switch v := op.(type) {
 			case *visitor.Filter:
-				colPos, ok := this.ColumnPosMap[v.Left]
+				colPos, ok := t.ColumnPosMap[v.Left]
 				if !ok {
 					return fmt.Errorf("过滤条件未匹配字段: 库:%s, 表:%s, 字段: %s", mTable.SchemaName, mTable.TableName, v.Left)
 				}
 				v.ColPos = colPos
 			}
 		}
-		this.CalcOp = mTable.CalcOp
+		t.CalcOp = mTable.CalcOp
 	}
 
 	return nil
 }
 
 // 获取只用字段
-func (this *Table) GetUseRow(row []interface{}) ([]interface{}, error) {
-	useRow := make([]interface{}, len(this.UseColumnNames))
-	for i, pos := range this.UseColumnPos {
+func (t *Table) GetUseRow(row []interface{}) ([]interface{}, error) {
+	useRow := make([]interface{}, len(t.UseColumnNames))
+	for i, pos := range t.UseColumnPos {
 		if pos >= len(row) {
 			return useRow, fmt.Errorf("最新到表字段数 大于 binlog解析的字段数据")
 		}
@@ -265,13 +265,13 @@ func (this *Table) GetUseRow(row []interface{}) ([]interface{}, error) {
 }
 
 // 过滤行
-func (this *Table) FilterRow(row []interface{}) bool {
-	if this.CalcOp == nil || len(this.CalcOp) == 0 {
+func (t *Table) FilterRow(row []interface{}) bool {
+	if t.CalcOp == nil || len(t.CalcOp) == 0 {
 		return true
 	}
 
 	calc := utils.NewCalcStack()
-	for _, op := range this.CalcOp {
+	for _, op := range t.CalcOp {
 		switch v := op.(type) {
 		case *visitor.Filter:
 			data := v.Compare(row[v.ColPos])
@@ -288,17 +288,17 @@ func (this *Table) FilterRow(row []interface{}) bool {
 	return calc.Result()
 }
 
-func (this *Table) GetPKValues(row []interface{}) []interface{} {
-	pkValues := make([]interface{}, 0, len(this.PKColumnNames))
-	for _, pkName := range this.PKColumnNames {
-		pos := this.ColumnPosMap[pkName]
+func (t *Table) GetPKValues(row []interface{}) []interface{} {
+	pkValues := make([]interface{}, 0, len(t.PKColumnNames))
+	for _, pkName := range t.PKColumnNames {
+		pos := t.ColumnPosMap[pkName]
 		pkValues = append(pkValues, row[pos])
 	}
 
 	return pkValues
 }
 
-func (this *Table) GetPKCrc32(row []interface{}) uint32 {
-	pkValues := this.GetPKValues(row)
+func (t *Table) GetPKCrc32(row []interface{}) uint32 {
+	pkValues := t.GetPKValues(row)
 	return utils.GetCrc32ByInterfaceSlice(pkValues)
 }

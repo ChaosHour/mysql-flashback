@@ -2,7 +2,7 @@ package dao
 
 import (
 	"fmt"
-	"github.com/daiguadaidai/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/config"
 	"testing"
 )
 
