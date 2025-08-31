@@ -32,7 +32,7 @@ type CreateConfig struct {
 	EnableRollbackInsert bool
 	EnableRollbackDelete bool
 	SaveDir              string
-	MatchSqls            []string // 使用sql语句来匹配需要查询的时间段或者
+	MatchSqls            []string // Use SQL statements to match the time period to query or
 }
 
 func NewStartConfig() *CreateConfig {
@@ -49,33 +49,33 @@ func GetStartConfig() *CreateConfig {
 	return sc
 }
 
-// 是否有开始位点信息
+// Whether there is start position information
 func (c *CreateConfig) HaveStartPosInfo() bool {
 	return c.StartLogFile != ""
 }
 
-// 是否所有结束位点信息
+// Whether there is end position information
 func (c *CreateConfig) HaveEndPosInfo() bool {
 	return c.EndLogFile != ""
 }
 
-// 是否有开始事件
+// Whether there is start event
 func (c *CreateConfig) HaveStartTime() bool {
 	return c.StartTime != ""
 }
 
-// 是否有结束时间
+// Whether there is end time
 func (c *CreateConfig) HaveEndTime() bool {
 	return c.EndTime != ""
 }
 
-// 设置最终的保存文件
+// Set the final save file
 func (c *CreateConfig) GetSaveDir() string {
 	if len(c.SaveDir) == 0 {
 		cmdDir, err := utils.CMDDir()
 		if err != nil {
 			saveDir := fmt.Sprintf("./%s", SAVE_DIR)
-			seelog.Errorf("获取命令所在路径失败, 使用默认路径: %s. %v",
+			seelog.Errorf("Failed to get command path, using default path: %s. %v",
 				saveDir, err.Error())
 			return saveDir
 		}

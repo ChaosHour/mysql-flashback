@@ -2,10 +2,11 @@ package visitor
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/ChaosHour/mysql-flashback/utils"
-	"github.com/pingcap/tidb/pkg/parser/opcode"
 	"strings"
+
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/cihub/seelog"
+	"github.com/pingcap/tidb/pkg/parser/opcode"
 )
 
 type MatchTable struct {
@@ -34,36 +35,24 @@ func (m *MatchTable) Table() string {
 	return fmt.Sprintf("%s.%s", m.SchemaName, m.TableName)
 }
 
-// 是否有开始位点信息
+// Whether there is start position information
 func (m *MatchTable) HaveStartPosInfo() bool {
-	if strings.TrimSpace(m.StartLogFile) == "" {
-		return false
-	}
-	return true
+	return strings.TrimSpace(m.StartLogFile) != ""
 }
 
-// 是否所有结束位点信息
+// Whether there is end position information
 func (m *MatchTable) HaveEndPosInfo() bool {
-	if strings.TrimSpace(m.EndLogFile) == "" {
-		return false
-	}
-	return true
+	return strings.TrimSpace(m.EndLogFile) != ""
 }
 
-// 是否有开始事件
+// Whether there is start event
 func (m *MatchTable) HaveStartTime() bool {
-	if strings.TrimSpace(m.StartRollBackTime) == "" {
-		return false
-	}
-	return true
+	return strings.TrimSpace(m.StartRollBackTime) != ""
 }
 
-// 是否有结束时间
+// Whether there is end time
 func (m *MatchTable) HaveEndTime() bool {
-	if strings.TrimSpace(m.EndRollBackTime) == "" {
-		return false
-	}
-	return true
+	return strings.TrimSpace(m.EndRollBackTime) != ""
 }
 
 // 开始位点小于其他位点
@@ -102,7 +91,7 @@ func (m *MatchTable) StartTimeLessThan(other *MatchTable) (bool, error) {
 		return false, nil
 	}
 
-	return false, fmt.Errorf("MatchTable StartTimeLessThan 比较出错. %s. %s", err1.Error(), err2.Error())
+	return false, fmt.Errorf("match table StartTimeLessThan comparison error. %s. %s", err1.Error(), err2.Error())
 }
 
 // 结束时间大于其他位点
@@ -117,7 +106,7 @@ func (m *MatchTable) EndTimeRatherThan(other *MatchTable) (bool, error) {
 		return false, nil
 	}
 
-	return false, fmt.Errorf("MatchTable EndTimeRatherThan 比较出错. %s. %s", err1.Error(), err2.Error())
+	return false, fmt.Errorf("match table EndTimeRatherThan comparison error. %s. %s", err1.Error(), err2.Error())
 }
 
 type Filter struct {

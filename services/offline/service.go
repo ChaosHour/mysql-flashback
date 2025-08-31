@@ -2,14 +2,15 @@ package offline
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
+	"os"
+	"strings"
+	"syscall"
+
 	"github.com/ChaosHour/mysql-flashback/config"
 	"github.com/ChaosHour/mysql-flashback/schema"
 	"github.com/ChaosHour/mysql-flashback/utils/sql_parser"
 	"github.com/ChaosHour/mysql-flashback/visitor"
-	"os"
-	"strings"
-	"syscall"
+	"github.com/cihub/seelog"
 )
 
 func Start(offlineCfg *config.OfflineConfig) {
@@ -17,7 +18,7 @@ func Start(offlineCfg *config.OfflineConfig) {
 	logger, _ := seelog.LoggerFromConfigAsBytes([]byte(config.LogDefautConfig()))
 	seelog.ReplaceLogger(logger)
 
-	// 检测启动配置信息是否可用
+	// Check if startup configuration information is available
 	if err := offlineCfg.Check(); err != nil {
 		seelog.Error(err.Error())
 		syscall.Exit(1)
@@ -62,22 +63,22 @@ func Start(offlineCfg *config.OfflineConfig) {
 		syscall.Exit(1)
 	}
 	if err = flashback.Start(); err != nil {
-		seelog.Errorf("生成回滚sql失败. %s", err.Error())
+		seelog.Errorf("Failed to generate rollback SQL. %s", err.Error())
 		syscall.Exit(1)
 	}
 
 	if !flashback.Successful {
-		seelog.Error("生成回滚sql失败")
+		seelog.Error("Failed to generate rollback SQL")
 		syscall.Exit(1)
 	}
-	seelog.Info("生成回滚sql完成")
+	seelog.Info("Rollback SQL generation completed")
 }
 
-// 通过文件获取表信息
+// Get table information from file
 func getTableWithFile(filename string) (map[string]*schema.Table, error) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("打开将表语句文件出错. 文件: %v. %v", filename, err)
+		return nil, fmt.Errorf("error opening table statement file. File: %v. %v", filename, err)
 	}
 	queryStr := string(content)
 

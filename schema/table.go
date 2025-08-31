@@ -2,14 +2,15 @@ package schema
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
+	"strings"
+
 	"github.com/ChaosHour/mysql-flashback/dao"
 	"github.com/ChaosHour/mysql-flashback/utils"
 	"github.com/ChaosHour/mysql-flashback/utils/sql_parser"
 	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/cihub/seelog"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
-	"strings"
 )
 
 type PKType int
@@ -174,7 +175,7 @@ func (t *Table) initAllColumnPos() {
 func (t *Table) initUseColumnPos() {
 	useColumnPos := make([]int, len(t.UseColumnNames))
 	for i, columnName := range t.UseColumnNames {
-		pos, _ := t.ColumnPosMap[columnName]
+		pos := t.ColumnPosMap[columnName]
 		useColumnPos[i] = pos
 	}
 	t.UseColumnPos = useColumnPos
@@ -234,7 +235,7 @@ func (t *Table) SetMTableInfo(mTable *visitor.MatchTable) error {
 	}
 
 	// 添加过滤条件
-	if mTable.CalcOp != nil && len(mTable.CalcOp) > 0 {
+	if len(mTable.CalcOp) > 0 {
 		for _, op := range mTable.CalcOp {
 			switch v := op.(type) {
 			case *visitor.Filter:
@@ -264,9 +265,9 @@ func (t *Table) GetUseRow(row []interface{}) ([]interface{}, error) {
 	return useRow, nil
 }
 
-// 过滤行
+// Filter row
 func (t *Table) FilterRow(row []interface{}) bool {
-	if t.CalcOp == nil || len(t.CalcOp) == 0 {
+	if len(t.CalcOp) == 0 {
 		return true
 	}
 

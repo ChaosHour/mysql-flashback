@@ -1,9 +1,10 @@
 package execute
 
 import (
-	"github.com/cihub/seelog"
-	"github.com/ChaosHour/mysql-flashback/config"
 	"syscall"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/cihub/seelog"
 )
 
 func Start(ec *config.ExecuteConfig, dbc *config.DBConfig) {
@@ -11,7 +12,7 @@ func Start(ec *config.ExecuteConfig, dbc *config.DBConfig) {
 	logger, _ := seelog.LoggerFromConfigAsBytes([]byte(config.LogDefautConfig()))
 	seelog.ReplaceLogger(logger)
 
-	seelog.Infof("回滚开始")
+	seelog.Infof("Rollback begins")
 
 	if err := checkConfig(ec, dbc); err != nil {
 		seelog.Error(err.Error())
@@ -27,15 +28,15 @@ func Start(ec *config.ExecuteConfig, dbc *config.DBConfig) {
 		syscall.Exit(1)
 	}
 	if !executor.EmitSuccess || !executor.ExecSuccess {
-		seelog.Errorf("回滚未执行成功. 执行了 %d 条", executor.ExecCount)
+		seelog.Errorf("Rollback execution failed. Executed %d statements", executor.ExecCount)
 		syscall.Exit(1)
 	}
 
-	seelog.Infof("回滚执行成功. 执行行数: %d", executor.ExecCount)
+	seelog.Infof("Rollback execution successful. Executed rows: %d", executor.ExecCount)
 }
 
-func checkConfig(ec *config.ExecuteConfig, dbc *config.DBConfig) error {
-	// 检测执行子命令配置文件, 设置执行的类型
+func checkConfig(ec *config.ExecuteConfig, _ *config.DBConfig) error {
+	// Check execute subcommand configuration file, set execution type
 	if err := ec.Check(); err != nil {
 		return err
 	}

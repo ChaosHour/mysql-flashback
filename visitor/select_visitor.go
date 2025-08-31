@@ -2,11 +2,12 @@ package visitor
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/ChaosHour/mysql-flashback/utils"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/opcode"
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
-	"strings"
 )
 
 type SelectVisitor struct {
@@ -14,8 +15,8 @@ type SelectVisitor struct {
 	TableCnt         int
 	Err              error
 	MTable           *MatchTable
-	PosInfoColCnt    int // 记录 where 位点字段出现的次数
-	EliminateOpCnt   int // 还有几个操作符需要消除
+	PosInfoColCnt    int // Count of where position fields
+	EliminateOpCnt   int // Number of operators left to eliminate
 }
 
 func NewSelectVisitor() *SelectVisitor {
@@ -41,7 +42,7 @@ func (s *SelectVisitor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 	case *ast.SelectField:
 		s.Err = s.enterSelectField(node)
 	case *ast.PatternLikeOrIlikeExpr:
-		s.Err = fmt.Errorf("不支持 WHERE LIKE 语句")
+		s.Err = fmt.Errorf("where like statement not supported")
 	}
 
 	return in, false
@@ -70,8 +71,8 @@ func (s *SelectVisitor) Leave(in ast.Node) (out ast.Node, ok bool) {
 }
 
 func (s *SelectVisitor) enterTableSource(node *ast.TableSource) error {
-	if s.TableCnt >= 1 { // 已经有1个表了
-		return fmt.Errorf("SELECT 语句只能操作一个表")
+	if s.TableCnt >= 1 { // already have 1 table
+		return fmt.Errorf("select statement can only operate on one table")
 	}
 	s.TableCnt++
 
@@ -80,7 +81,7 @@ func (s *SelectVisitor) enterTableSource(node *ast.TableSource) error {
 		return nil
 	}
 	if strings.TrimSpace(tableName.Schema.O) == "" {
-		return fmt.Errorf("没有指定 数据库名")
+		return fmt.Errorf("database name not specified")
 	}
 	s.MTable.TableName = tableName.Name.O
 	s.MTable.SchemaName = tableName.Schema.O
@@ -88,11 +89,11 @@ func (s *SelectVisitor) enterTableSource(node *ast.TableSource) error {
 	return nil
 }
 
-func (s *SelectVisitor) enterSubqueryExpr(node *ast.SubqueryExpr) error {
-	return fmt.Errorf("SELECT 语句不能有子查询")
+func (s *SelectVisitor) enterSubqueryExpr(_ *ast.SubqueryExpr) error {
+	return fmt.Errorf("select statement cannot have subqueries")
 }
 
-func (s *SelectVisitor) enterBinaryOperationExpr(node *ast.BinaryOperationExpr) error {
+func (s *SelectVisitor) enterBinaryOperationExpr(_ *ast.BinaryOperationExpr) error {
 
 	return nil
 }
@@ -106,7 +107,7 @@ func (s *SelectVisitor) leaveBinaryOperationExpr(node *ast.BinaryOperationExpr) 
 		}
 		v, err := GetValueExprValue(valueExpr)
 		if err != nil {
-			return fmt.Errorf("WHERE 子句, 字段:%s, 值:%v. %s", columnNameExpr.Name.Name.O, valueExpr.GetValue(), err.Error())
+			return fmt.Errorf("where clause, field:%s, value:%v. %s", columnNameExpr.Name.Name.O, valueExpr.GetValue(), err.Error())
 		}
 		switch columnNameExpr.Name.Name.O {
 		case "start_log_file":
@@ -118,7 +119,7 @@ func (s *SelectVisitor) leaveBinaryOperationExpr(node *ast.BinaryOperationExpr) 
 			s.EliminateOpCnt++
 			pos, err := utils.InterfaceToUint64(v)
 			if err != nil {
-				return fmt.Errorf("SQL where 条件 start_log_pos 值不能转化为 uint64")
+				return fmt.Errorf("sql where condition start_log_pos value cannot be converted to uint64")
 			}
 			s.MTable.StartLogPos = uint64(pos)
 		case "end_log_file":
@@ -130,7 +131,7 @@ func (s *SelectVisitor) leaveBinaryOperationExpr(node *ast.BinaryOperationExpr) 
 			s.EliminateOpCnt++
 			pos, err := utils.InterfaceToUint64(v)
 			if err != nil {
-				return fmt.Errorf("SQL where 条件 end_log_pos 值不能转化为 uint64")
+				return fmt.Errorf("sql where condition end_log_pos value cannot be converted to uint64")
 			}
 			s.MTable.EndLogPos = uint64(pos)
 		case "start_rollback_time":
@@ -146,7 +147,7 @@ func (s *SelectVisitor) leaveBinaryOperationExpr(node *ast.BinaryOperationExpr) 
 			s.EliminateOpCnt++
 			theadId, err := utils.InterfaceToUint64(v)
 			if err != nil {
-				return fmt.Errorf("thread_id = %#v  解析SQL获取Thread ID 有误, 无法转化为 int64", v)
+				return fmt.Errorf("thread_id = %#v parsing sql to get thread id error, cannot convert to int64", v)
 			}
 			s.MTable.ThreadId = uint32(theadId)
 		default:
@@ -166,7 +167,7 @@ func (s *SelectVisitor) leaveBinaryOperationExpr(node *ast.BinaryOperationExpr) 
 	return nil
 }
 
-// 离开 select field 节点
+// Leave select field node
 func (s *SelectVisitor) enterSelectField(node *ast.SelectField) error {
 	if node.Expr == nil {
 		s.MTable.AllColumn = true
@@ -186,23 +187,23 @@ func (s *SelectVisitor) enterSelectField(node *ast.SelectField) error {
 	return nil
 }
 
-// 离开 In子句
+// Leave IN clause
 func (s *SelectVisitor) leavePatternInExpr(node *ast.PatternInExpr) error {
 	if node.Sel != nil {
-		return fmt.Errorf("不支持 IN (SELECT ...) 语句")
+		return fmt.Errorf("in (select ...) statement not supported")
 	}
-	if node.List == nil || len(node.List) == 0 {
-		return fmt.Errorf("IN 子句值不能为空")
+	if len(node.List) == 0 {
+		return fmt.Errorf("in clause value cannot be empty")
 	}
 
 	columnNameExpr, ok := node.Expr.(*ast.ColumnNameExpr)
 	if !ok {
-		return fmt.Errorf("识别 IN 条件字段名失败.")
+		return fmt.Errorf("failed to identify in condition field name")
 	}
-	// 获取第一个元素的类型
+	// Get the type of the first element
 	firstValueExpr, ok := node.List[0].(*driver.ValueExpr)
 	if !ok {
-		return fmt.Errorf("不能正确获取 IN 子句中第一个元素")
+		return fmt.Errorf("cannot correctly get first element in in clause")
 	}
 	firstValueType := GetKeyType(firstValueExpr.GetValue())
 
@@ -210,29 +211,29 @@ func (s *SelectVisitor) leavePatternInExpr(node *ast.PatternInExpr) error {
 	for _, nodeExpr := range node.List {
 		valueExpr, ok := nodeExpr.(*driver.ValueExpr)
 		if !ok {
-			return fmt.Errorf("IN 子句中的值不能正常解析")
+			return fmt.Errorf("value in in clause cannot be parsed normally")
 		}
 		v, err := GetValueExprValue(valueExpr)
 		if err != nil {
-			return fmt.Errorf("IN 子句中值:%v. %s", valueExpr.GetValue(), err.Error())
+			return fmt.Errorf("value in in clause:%v. %s", valueExpr.GetValue(), err.Error())
 		}
 		switch firstValueType {
 		case IN_KEY_TYPE_INT64:
 			key, err := utils.InterfaceToInt64(v)
 			if err != nil {
-				return fmt.Errorf("IN 子句中的值:%v, 转化为 Int64 出错. %s", v, err.Error())
+				return fmt.Errorf("value in in clause:%v, error converting to int64. %s", v, err.Error())
 			}
 			inElement.Data[key] = struct{}{}
 		case IN_KEY_TYPE_UINT64:
 			key, err := utils.InterfaceToUint64(v)
 			if err != nil {
-				return fmt.Errorf("IN 子句中的值:%v, 转化为 Uint64 出错. %s", v, err.Error())
+				return fmt.Errorf("value in in clause:%v, error converting to uint64. %s", v, err.Error())
 			}
 			inElement.Data[key] = struct{}{}
 		case IN_KEY_TYPE_FLOAT64:
 			key, err := utils.InterfaceToFloat64(v)
 			if err != nil {
-				return fmt.Errorf("IN 子句中的值:%v, 转化为 Float64 出错. %s", v, err.Error())
+				return fmt.Errorf("value in in clause:%v, error converting to float64. %s", v, err.Error())
 			}
 			inElement.Data[key] = struct{}{}
 		case IN_KEY_TYPE_STR:
@@ -250,25 +251,25 @@ func (s *SelectVisitor) leaveBetweenExpr(node *ast.BetweenExpr) error {
 	case *ast.ColumnNameExpr:
 		leftValueExpr, ok := node.Left.(*driver.ValueExpr)
 		if !ok {
-			return fmt.Errorf("Between LEFT and RIGHT 语句, 不能正确解析 LEFT 值")
+			return fmt.Errorf("between left and right statement, cannot correctly parse left value")
 		}
 		leftValue, err := GetValueExprValue(leftValueExpr)
 		if err != nil {
-			return fmt.Errorf("Between LEFT and RIGHT 子句, 字段:%s, LEFT值:%v. %s", columnNameExpr.Name.Name.O, leftValueExpr.GetValue(), err.Error())
+			return fmt.Errorf("between left and right clause, field:%s, left value:%v. %s", columnNameExpr.Name.Name.O, leftValueExpr.GetValue(), err.Error())
 		}
 
 		rightValueExpr, ok := node.Right.(*driver.ValueExpr)
 		if !ok {
-			return fmt.Errorf("Between LEFT and RIGHT 语句, 不能正确解析 RIGHT 值")
+			return fmt.Errorf("between left and right statement, cannot correctly parse right value")
 		}
 		rightValue, err := GetValueExprValue(rightValueExpr)
 		if err != nil {
-			return fmt.Errorf("Between LEFT and RIGHT 子句, 字段:%s, RIGHT值:%v. %s", columnNameExpr.Name.Name.O, rightValueExpr.GetValue(), err.Error())
+			return fmt.Errorf("between left and right clause, field:%s, right value:%v. %s", columnNameExpr.Name.Name.O, rightValueExpr.GetValue(), err.Error())
 		}
 		betweenAndElement := NewBetweenAndElement(node.Not, leftValue, rightValue)
 		s.MTable.CalcOp = append(s.MTable.CalcOp, NewFilter(columnNameExpr.Name.Name.O, opcode.NullEQ, betweenAndElement))
 	default:
-		return fmt.Errorf("非法 BETWEEN ... AND ... 子句")
+		return fmt.Errorf("illegal between ... and ... clause")
 	}
 	return nil
 }

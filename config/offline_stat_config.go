@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+
 	"github.com/ChaosHour/mysql-flashback/utils"
 )
 
@@ -14,21 +15,21 @@ type OfflineStatConfig struct {
 
 func (o *OfflineStatConfig) Check() error {
 	if len(o.BinlogFiles) == 0 {
-		return fmt.Errorf("请输入离线 binlog 文件名以及路径")
+		return fmt.Errorf("please enter offline binlog file names and paths")
 	}
 
 	for _, fileName := range o.BinlogFiles {
 		ok, err := utils.PathExists(fileName)
 		if err != nil {
-			return fmt.Errorf("检测离线 binlog 文件是否存在出错, %v", err)
+			return fmt.Errorf("error checking if offline binlog file exists, %v", err)
 		}
 		if !ok {
-			return fmt.Errorf("离线 binlog 文件不存在, %v", fileName)
+			return fmt.Errorf("offline binlog file does not exist, %v", fileName)
 		}
 	}
 
 	if err := utils.CreateDir(o.SaveDir); err != nil {
-		return fmt.Errorf("创建统计信息保存目录出错. 目录: %v. %v", o.SaveDir, err)
+		return fmt.Errorf("failed to create statistics save directory. Directory: %v. %v", o.SaveDir, err)
 	}
 
 	return nil

@@ -3,16 +3,17 @@ package execute
 import (
 	"context"
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/ChaosHour/mysql-flashback/config"
-	"github.com/ChaosHour/mysql-flashback/dao"
-	"github.com/ChaosHour/mysql-flashback/utils"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/dao"
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/cihub/seelog"
 )
 
 const (
@@ -82,30 +83,30 @@ func (e *Executor) Start() error {
 
 	wg.Wait()
 
-	if e.EmitSuccess && e.ExecSuccess { // 成功执行
+	if e.EmitSuccess && e.ExecSuccess { // Successfully executed
 		e.saveInfo(true)
 	}
 
 	for i, num := range e.chanExecNums {
-		seelog.Infof("协程 %d, 最后执行的Sql号为: %d", i, num)
+		seelog.Infof("goroutine %d, last executed SQL number: %d", i, num)
 	}
 
 	return nil
 }
 
-// 倒序读取文件
+// Read file in reverse order
 func (e *Executor) readFile(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	fileInfo, err := os.Stat(e.ec.FilePath)
 	if err != nil {
-		seelog.Errorf("获取文件信息失败: %s. %v", e.ec.FilePath, err.Error())
+		seelog.Errorf("Failed to get file information: %s. %v", e.ec.FilePath, err.Error())
 		e.closeSQLChans()
 		return
 	}
 	f, err := os.Open(e.ec.FilePath)
 	if err != nil {
-		seelog.Errorf("打开回滚sql文件失败: %s. %v", e.ec.FilePath, err.Error())
+		seelog.Errorf("Failed to open rollback SQL file: %s. %v", e.ec.FilePath, err.Error())
 		e.closeSQLChans()
 		return
 	}
@@ -124,7 +125,7 @@ func (e *Executor) readFile(wg *sync.WaitGroup) {
 		default:
 		}
 		if err = e.generalSQL(f, unReadSize, defautBufSize, &part, &lastRecords); err != nil {
-			seelog.Errorf("打开回滚sql文件失败: %s. %v", e.ec.FilePath, err.Error())
+			seelog.Errorf("Failed to open rollback SQL file: %s. %v", e.ec.FilePath, err.Error())
 			e.closeSQLChans()
 			return
 		}
@@ -219,11 +220,11 @@ func (e *Executor) emitSQL(sqlItems []string) error {
 func (e *Executor) execSQL(wg *sync.WaitGroup, sqlChan chan *SqlContext, sqlExecNum *int64, tag int64) {
 	defer wg.Done()
 
-	seelog.Infof("启动第 %d 个指定回滚sql协程", tag)
+	seelog.Infof("Starting rollback SQL goroutine #%d", tag)
 	d := dao.NewDefaultDao()
 	for sqlCtx := range sqlChan {
 		if err := d.ExecDML(sqlCtx.Sql); err != nil {
-			seelog.Errorf("第%d条sql执行回滚失败. %s. %s", sqlCtx.Tag, sqlCtx.Sql, err.Error())
+			seelog.Errorf("SQL statement #%d rollback execution failed. %s. %s", sqlCtx.Tag, sqlCtx.Sql, err.Error())
 		}
 
 		e.IncrCount()
@@ -271,7 +272,7 @@ func (e *Executor) saveInfo(complete bool) {
 }
 
 func (e *Executor) getProgress(complete bool) (float64, string) {
-	msg := fmt.Sprintf("获取数: %d, 回滚数: %d", e.ParseCount, e.ExecCount)
+	msg := fmt.Sprintf("Parsed: %d, Rolled back: %d", e.ParseCount, e.ExecCount)
 	if complete {
 		return 100, msg
 	}

@@ -1,11 +1,12 @@
 package create
 
 import (
-	"github.com/cihub/seelog"
-	"github.com/ChaosHour/mysql-flashback/config"
-	"github.com/ChaosHour/mysql-flashback/visitor"
 	"strings"
 	"syscall"
+
+	"github.com/ChaosHour/mysql-flashback/config"
+	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/cihub/seelog"
 )
 
 func Start(cc *config.CreateConfig, dbc *config.DBConfig) {
@@ -51,13 +52,13 @@ func Start(cc *config.CreateConfig, dbc *config.DBConfig) {
 	}
 
 	if err = flashback.Start(); err != nil {
-		seelog.Errorf("生成回滚sql失败. %s", err.Error())
+		seelog.Errorf("Failed to generate rollback SQL. %s", err.Error())
 		syscall.Exit(1)
 	}
 	if !flashback.Successful {
-		seelog.Error("生成回滚sql失败")
+		seelog.Error("Failed to generate rollback SQL")
 		syscall.Exit(1)
 	}
-	seelog.Info("生成回滚sql完成")
+	seelog.Info("Rollback SQL generation completed")
 
 }

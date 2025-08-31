@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cihub/seelog"
 	"github.com/ChaosHour/mysql-flashback/config"
 	"github.com/ChaosHour/mysql-flashback/dao"
 	"github.com/ChaosHour/mysql-flashback/models"
 	"github.com/ChaosHour/mysql-flashback/utils"
 	"github.com/ChaosHour/mysql-flashback/visitor"
+	"github.com/cihub/seelog"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 )
@@ -82,7 +82,7 @@ func getStartFileByTime(ts uint32, dbc *config.DBConfig) (*models.Position, erro
 		return nil, fmt.Errorf("%v", err)
 	}
 	if len(bLogs) < 1 {
-		return nil, fmt.Errorf("show binary logs 没有数. 请检查是否开始起binlog")
+		return nil, fmt.Errorf("show binary logs returned no results. please check if binlog is enabled")
 	}
 	lastBLOG := bLogs[len(bLogs)-1] // 获取最后一个binlog
 
@@ -168,14 +168,14 @@ var (
 )
 
 /*
-	获取需要回滚的表
+	Get tables that need rollback
 
 Return:
 [
 
 		{
-	        cchema: 数据库名,
-	        table: 表名
+	        schema: database name,
+	        table: table name
 	    },
 	    ......
 
@@ -189,24 +189,24 @@ func FindRollbackTables(cc *config.CreateConfig, mTables []*visitor.MatchTable) 
 		return rollbackTables, RollbackAllTable, nil
 	}
 
-	notAllTableSchema := make(map[string]bool) // 保存不需要回滚所有表的 schema
+	notAllTableSchema := make(map[string]bool) // Save schemas that don't need to rollback all tables
 	for _, table := range cc.RollbackTables {
 		items := strings.Split(table, ".")
 		switch len(items) {
-		case 1: // table. 没有指定schema, 只指定了table
-			if len(cc.RollbackSchemas) == 0 { // 该表没有指定库
-				return nil, RollbackNone, fmt.Errorf("表:%v. 没有指定库", table)
+		case 1: // table. No schema specified, only table specified
+			if len(cc.RollbackSchemas) == 0 { // No schema specified for this table
+				return nil, RollbackNone, fmt.Errorf("table:%v. no schema specified", table)
 			}
-			// 如果有单独指定schema(--rollback-schema=db1), 代表需要回滚的表为 db1.t_n, 并且这个schema则标记为非所有表都需要回滚的库
-			for _, cchema := range cc.RollbackSchemas {
-				if _, ok := notAllTableSchema[cchema]; !ok {
-					notAllTableSchema[cchema] = true
+			// If schema is specified separately (--rollback-schema=db1), it means tables to rollback are db1.t_n, and this schema is marked as not needing to rollback all tables in the schema
+			for _, schema := range cc.RollbackSchemas {
+				if _, ok := notAllTableSchema[schema]; !ok {
+					notAllTableSchema[schema] = true
 				}
 
-				t := models.NewDBTable(cchema, table)
+				t := models.NewDBTable(schema, table)
 				rollbackTables = append(rollbackTables, t)
 			}
-		case 2: // schema.table 的格式, 代表有指定schema 和 table, 并标记 schema 不能进行回滚库中所有表
+		case 2: // schema.table format, means schema and table are specified, and mark schema as not able to rollback all tables in schema
 			if _, ok := notAllTableSchema[items[0]]; !ok {
 				notAllTableSchema[items[0]] = true
 			}
@@ -217,7 +217,7 @@ func FindRollbackTables(cc *config.CreateConfig, mTables []*visitor.MatchTable) 
 		}
 	}
 
-	// 从 match-sql 中解析需要回滚的表
+	// Parse tables that need rollback from match-sql
 	for _, mTable := range mTables {
 		if _, ok := notAllTableSchema[mTable.SchemaName]; !ok {
 			notAllTableSchema[mTable.SchemaName] = true
@@ -226,16 +226,16 @@ func FindRollbackTables(cc *config.CreateConfig, mTables []*visitor.MatchTable) 
 		rollbackTables = append(rollbackTables, t)
 	}
 
-	// 要是指定的schema, 不存在于 notAllTableSchema 这个变量中, 说明这个schema中的表都需要回滚
-	for _, cchema := range cc.RollbackSchemas {
-		if _, ok := notAllTableSchema[cchema]; ok {
+	// If the specified schema doesn't exist in notAllTableSchema variable, it means all tables in this schema need to be rolled back
+	for _, schema := range cc.RollbackSchemas {
+		if _, ok := notAllTableSchema[schema]; ok {
 			continue
 		}
-		notAllTableSchema[cchema] = true
+		notAllTableSchema[schema] = true
 
-		tables, err := dao.NewDefaultDao().FindTablesBySchema(cchema)
+		tables, err := dao.NewDefaultDao().FindTablesBySchema(schema)
 		if err != nil {
-			return nil, RollbackNone, fmt.Errorf("获取数据库[%s]下面的所有表失败. %v", cchema, err)
+			return nil, RollbackNone, fmt.Errorf("failed to get all tables under database[%s]. %v", schema, err)
 		}
 		rollbackTables = append(rollbackTables, tables...)
 	}
@@ -310,7 +310,7 @@ func mTableCompareGetMin(first *visitor.MatchTable, second *visitor.MatchTable) 
 		return second, nil
 	}
 
-	return nil, fmt.Errorf("match table 没有可以使用的(开始)位点信息. %s <=> %s", first.Table(), second.Table())
+	return nil, fmt.Errorf("match table has no usable start position information. %s <=> %s", first.Table(), second.Table())
 }
 
 // 获取结束位点信息最大的 MatchTable
@@ -359,7 +359,7 @@ func mTableCompareGetMax(first *visitor.MatchTable, second *visitor.MatchTable) 
 		return second, nil
 	}
 
-	return nil, fmt.Errorf("match table 没有可以使用的(结束)位点信息. %s <=> %s", first.Table(), second.Table())
+	return nil, fmt.Errorf("match table has no usable end position information. %s <=> %s", first.Table(), second.Table())
 }
 
 // 设置任务最终开始位点信息
