@@ -63,11 +63,11 @@ func NewOfflineCreator(offlineConfig *config.OfflineConfig, mTables []*visitor.M
 		ct.RollBackTableMap[key] = table
 	}
 
-	// 设置 需要回滚的 表的字段和条件
+	// Set fields and conditions for tables that need rollback
 	for _, mTable := range mTables {
 		rollbackTable, ok := ct.RollBackTableMap[mTable.Table()]
 		if !ok {
-			seelog.Warnf("match-sql 指定的表没有匹配到. 库:%s, 表:%s", mTable.SchemaName, mTable.TableName)
+			seelog.Warnf("Table specified by match-sql not matched. Schema:%s, Table:%s", mTable.SchemaName, mTable.TableName)
 			continue
 		}
 
@@ -148,24 +148,24 @@ func (o *OfflineCreator) runProduceEvent(wg *sync.WaitGroup) {
 		o.closeOriChan()
 		o.closeRollabckChan()
 	}()
-	seelog.Infof("开始解析binlog文件, 一共有 %v 个文件需要进行解析", len(o.OfflineCfg.BinlogFiles))
+	seelog.Infof("Starting to parse binlog files, total of %v files need to be parsed", len(o.OfflineCfg.BinlogFiles))
 
-	// 创建一个 BinlogParser 对象
+	// Create a BinlogParser object
 	parser := replication.NewBinlogParser()
 	for i, binlogFile := range o.OfflineCfg.BinlogFiles {
 		o.CurrentFileIndex = i + 1
-		seelog.Infof("开始解析binlog文件. 进度: %v/%v, binlog文件: %v", o.CurrentFileIndex, len(o.OfflineCfg.BinlogFiles), binlogFile)
+		seelog.Infof("Starting to parse binlog file. Progress: %v/%v, binlog file: %v", o.CurrentFileIndex, len(o.OfflineCfg.BinlogFiles), binlogFile)
 		o.CurrentPosition.File = utils.Filename(binlogFile)
 
 		err := parser.ParseFile(binlogFile, 0, func(event *replication.BinlogEvent) error {
 			if o.Quited {
-				seelog.Warnf("发现需要退出, 停止产生事件. 文件: %v, pos: %v", binlogFile, event.Header.LogPos)
+				seelog.Warnf("Detected need to exit, stopping event generation. File: %v, pos: %v", binlogFile, event.Header.LogPos)
 				return nil
 			}
 			return o.handleEvent(event)
 		})
 		if err != nil {
-			seelog.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(o.OfflineCfg.BinlogFiles), binlogFile, err)
+			seelog.Errorf("Error parsing binlog. Progress: %v/%v, binlog file: %v. %v", i+1, len(o.OfflineCfg.BinlogFiles), binlogFile, err)
 			o.quit()
 			return
 		}
@@ -175,13 +175,13 @@ func (o *OfflineCreator) runProduceEvent(wg *sync.WaitGroup) {
 		}
 	}
 
-	// 正常完成
-	seelog.Infof("正常完成解析binlog")
+	// Normal completion
+	seelog.Infof("Successfully completed parsing binlog")
 	o.quit()
 	o.Successful = true
 }
 
-// 处理binlog事件
+// Handle binlog events
 func (o *OfflineCreator) handleEvent(ev *replication.BinlogEvent) error {
 	o.CurrentPosition.Position = uint64(ev.Header.LogPos) // 设置当前位点
 	o.CurrentTimestamp = ev.Header.Timestamp
@@ -368,9 +368,9 @@ func (o *OfflineCreator) writeOriInsert(
 		// 获取PK数据  "aaa", nil -> "aaa", "NULL"
 		data, err := utils.ConverSQLType(row)
 		if err != nil {
-			return fmt.Errorf("[writeOriInsert] 将一行所有字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeOriInsert] Error converting all field data in a row to SQL string. %v", err.Error())
 		}
-		// 将模板和数据组合称最终的SQL
+		// Combine template and data into final SQL
 		sqlStr := fmt.Sprintf(insertTemplate, data...)
 		if _, err := f.WriteString(sqlStr); err != nil {
 			return fmt.Errorf("[writeOriInsert] 将sql写入文件出错. %v", err.Error())
@@ -397,17 +397,17 @@ func (o *OfflineCreator) writeOriUpdate(
 			continue
 		}
 
-		// 设置获取set子句的值
+		// Set values for SET clause
 		setUseRow, err := tbl.GetUseRow(ev.Rows[setIndex])
 		if err != nil {
-			seelog.Errorf("%v. Update Ori 表: %v. 字段: %v. binlog数据: %v", err, tbl.TableName, tbl.UseColumnNames, ev.Rows[setIndex])
+			seelog.Errorf("%v. Update Ori Table: %v. Fields: %v. Binlog data: %v", err, tbl.TableName, tbl.UseColumnNames, ev.Rows[setIndex])
 			continue
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
 		copy(placeholderValues, setUseRow)
 
-		// 设置获取where子句的值
+		// Set values for WHERE clause
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
 
 		// 获取主键值的 crc32 值
@@ -417,12 +417,12 @@ func (o *OfflineCreator) writeOriUpdate(
 		updateTemplate := utils.ReplaceSqlPlaceHolder(tbl.UpdateTemplate, placeholderValues, crc32, timeStr, threadId)
 		data, err := utils.ConverSQLType(placeholderValues)
 		if err != nil {
-			return fmt.Errorf("[writeOriUpdate] 将一行所有字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeOriUpdate] Error converting all field data in a row to SQL string. %v", err.Error())
 		}
 
 		sql := fmt.Sprintf(updateTemplate, data...)
 		if _, err := f.WriteString(sql); err != nil {
-			return fmt.Errorf("[writeOriUpdate] 将sql写入文件出错. %v", err.Error())
+			return fmt.Errorf("[writeOriUpdate] Error writing SQL to file. %v", err.Error())
 		}
 	}
 	return nil
@@ -454,9 +454,9 @@ func (o *OfflineCreator) writeOriDelete(
 		// 获取PK数据  "aaa", nil -> "aaa", "NULL"
 		pkData, err := utils.ConverSQLType(placeholderValues)
 		if err != nil {
-			return fmt.Errorf("[writeOriDelete] 将主键字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeOriDelete] Error converting primary key field data to SQL string. %v", err.Error())
 		}
-		// 将模板和数据组合称最终的SQL
+		// Combine template and data into final SQL
 		sqlStr := fmt.Sprintf(deleteTemplate, pkData...)
 
 		if _, err := f.WriteString(sqlStr); err != nil {
@@ -488,9 +488,9 @@ func (o *OfflineCreator) writeRollbackInsert(
 		// 获取PK数据  "aaa", nil -> "aaa", "NULL"
 		data, err := utils.ConverSQLType(row)
 		if err != nil {
-			return fmt.Errorf("[writeRollbackInsert] 将一行所有字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeRollbackInsert] Error converting all field data in a row to SQL string. %v", err.Error())
 		}
-		// 将模板和数据组合称最终的SQL
+		// Combine template and data into final SQL
 		sqlStr := fmt.Sprintf(insertTemplate, data...)
 		if _, err := f.WriteString(sqlStr); err != nil {
 			return fmt.Errorf("[writeRollbackInsert] 将sql写入文件出错. %v", err.Error())
@@ -517,17 +517,17 @@ func (o *OfflineCreator) writeRollbackUpdate(
 			continue
 		}
 
-		// 设置获取set子句的值
+		// Set values for SET clause
 		setUseRow, err := tbl.GetUseRow(ev.Rows[setIndex])
 		if err != nil {
-			seelog.Errorf("%v. Update Rollback 表: %v. 字段: %v. binlog数据: %v", err, tbl.TableName, tbl.UseColumnNames, ev.Rows[setIndex])
+			seelog.Errorf("%v. Update Rollback Table: %v. Fields: %v. Binlog data: %v", err, tbl.TableName, tbl.UseColumnNames, ev.Rows[setIndex])
 			continue
 		}
 
 		placeholderValues := make([]interface{}, len(setUseRow)+len(tbl.PKColumnNames))
 		copy(placeholderValues, setUseRow)
 
-		// 设置获取where子句的值
+		// Set values for WHERE clause
 		tbl.SetPKValues(ev.Rows[whereIndex], placeholderValues[len(setUseRow):])
 
 		// 获取主键值的 crc32 值
@@ -536,17 +536,17 @@ func (o *OfflineCreator) writeRollbackUpdate(
 		updateTemplate := utils.ReplaceSqlPlaceHolder(tbl.UpdateTemplate, placeholderValues, crc32, timeStr, threadId)
 		data, err := utils.ConverSQLType(placeholderValues)
 		if err != nil {
-			return fmt.Errorf("[writeRollbackUpdate] 将一行所有字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeRollbackUpdate] Error converting all field data in a row to SQL string. %v", err.Error())
 		}
 		sqlStr := fmt.Sprintf(updateTemplate, data...)
 		if _, err := f.WriteString(sqlStr); err != nil {
-			return fmt.Errorf("[writeRollbackUpdate] 将sql写入文件出错. %v", err.Error())
+			return fmt.Errorf("[writeRollbackUpdate] Error writing SQL to file. %v", err.Error())
 		}
 	}
 	return nil
 }
 
-// 生成update的回滚sql并切入文件
+// Generate rollback SQL for update and write to file
 func (o *OfflineCreator) writeRollbackDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
@@ -572,9 +572,9 @@ func (o *OfflineCreator) writeRollbackDelete(
 		// 获取PK数据  "aaa", nil -> "aaa", "NULL"
 		pkData, err := utils.ConverSQLType(placeholderValues)
 		if err != nil {
-			return fmt.Errorf("[writeRollbackDelete] 将主键字段数据转化成sql字符串出错. %v", err.Error())
+			return fmt.Errorf("[writeRollbackDelete] Error converting primary key field data to SQL string. %v", err.Error())
 		}
-		// 将模板和数据组合称最终的SQL
+		// Combine template and data into final SQL
 		sqlStr := fmt.Sprintf(deleteTemplate, pkData...)
 
 		if _, err := f.WriteString(sqlStr); err != nil {

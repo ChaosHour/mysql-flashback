@@ -29,7 +29,7 @@ type Creator struct {
 	CC               *config.CreateConfig
 	DBC              *config.DBConfig
 	Syncer           *replication.BinlogSyncer
-	CurrentTable     *models.DBTable // 但前的表
+	CurrentTable     *models.DBTable // Current table
 	StartPosition    *models.Position
 	EndPosition      *models.Position
 	CurrentPosition  *models.Position
@@ -73,33 +73,33 @@ func NewFlashback(sc *config.CreateConfig, dbc *config.DBConfig, mTables []*visi
 		return nil, err
 	}
 
-	// 获取获取位点的类型, 是通过 位点获取, 还是通过时间
-	if ct.CC.HaveStartPosInfo() { // 通过指定位点获取开始位点
+	// Get the type of position acquisition, whether by position or by time
+	if ct.CC.HaveStartPosInfo() { // Get start position through specified position
 		ct.GetStartPosType = START_POS_BY_POS
-		seelog.Infof("解析binglog开始位点通过指定 开始binlog 位点获取. 开始位点: %s", ct.StartPosition.String())
-	} else if ct.CC.HaveStartTime() { // 通过时间获取开始位点
+		seelog.Infof("Parse binlog start position obtained through specified start binlog position. Start position: %s", ct.StartPosition.String())
+	} else if ct.CC.HaveStartTime() { // Get start position through time
 		ct.GetStartPosType = START_POS_BY_TIME
-		seelog.Infof("解析binglog开始位点通过指定 开始时间 获取. 开始位点: %s", ct.StartPosition.String())
+		seelog.Infof("Parse binlog start position obtained through specified start time. Start position: %s", ct.StartPosition.String())
 		ct.StartTime, err = utils.NewTime(ct.CC.StartTime)
 		if err != nil {
-			return nil, fmt.Errorf("输入的开始时间有问题. %v", err)
+			return nil, fmt.Errorf("the input start time has a problem. %v", err)
 		}
 		ct.StartTimestamp = uint32(ct.StartTime.Unix())
 	} else {
-		return nil, fmt.Errorf("无法获取")
+		return nil, fmt.Errorf("unable to obtain")
 	}
 
-	// 原sql文件
+	// Original SQL file
 	fileName := ct.getSqlFileName("origin_sql")
 	ct.OriSQLFile = fmt.Sprintf("%s/%s", ct.CC.GetSaveDir(), fileName)
-	seelog.Infof("原sql文件保存路径: %s", ct.OriSQLFile)
+	seelog.Infof("Original SQL file save path: %s", ct.OriSQLFile)
 
-	// rollabck sql 文件
+	// Rollback SQL file
 	fileName = ct.getSqlFileName("rollback_sql")
 	ct.RollbackSQLFile = fmt.Sprintf("%s/%s", ct.CC.GetSaveDir(), fileName)
-	seelog.Infof("回滚sql文件保存路径: %s", ct.RollbackSQLFile)
+	seelog.Infof("Rollback SQL file save path: %s", ct.RollbackSQLFile)
 
-	if ct.CC.HaveEndPosInfo() { // 判断赋值结束位点
+	if ct.CC.HaveEndPosInfo() { // Determine and assign end position
 		ct.HaveEndPosition = true
 		ct.EndPosition = &models.Position{
 			File:     ct.CC.EndLogFile,
@@ -110,7 +110,7 @@ func NewFlashback(sc *config.CreateConfig, dbc *config.DBConfig, mTables []*visi
 			return nil, err
 		}
 		if lastPos.LessThan(ct.EndPosition) {
-			return nil, fmt.Errorf("指定的结束位点[%s]还没有到来", ct.EndPosition.String())
+			return nil, fmt.Errorf("the specified end position [%s] has not arrived yet", ct.EndPosition.String())
 		}
 	} else if ct.CC.HaveEndTime() { // 判断赋值结束时间
 		ct.HaveEndTime = true
@@ -125,24 +125,24 @@ func NewFlashback(sc *config.CreateConfig, dbc *config.DBConfig, mTables []*visi
 		}
 	}
 
-	// 获取需要回滚的表
+	// Get tables that need rollback
 	rollbackTables, rollbackType, err := FindRollbackTables(ct.CC, mTables)
 	if err != nil {
 		return nil, err
 	}
 	ct.RollbackType = rollbackType
-	if ct.RollbackType == RollbackPartialTable { // 需要回滚部分表
+	if ct.RollbackType == RollbackPartialTable { // Need to rollback partial tables
 		for _, table := range rollbackTables {
 			if err = ct.cacheRollbackTable(table.TableSchema, table.TableName); err != nil {
 				return nil, err
 			}
 		}
 
-		// 设置 需要回滚的 表的字段和条件
+		// Set fields and conditions for tables that need rollback
 		for _, mTable := range mTables {
 			rollbackTable, ok := ct.RollBackTableMap[mTable.Table()]
 			if !ok {
-				seelog.Warnf("match-sql 指定的表没有匹配到. 库:%s, 表:%s", mTable.SchemaName, mTable.TableName)
+				seelog.Warnf("Table specified by match-sql not matched. Schema:%s, Table:%s", mTable.SchemaName, mTable.TableName)
 				continue
 			}
 
@@ -187,7 +187,7 @@ func (c *Creator) closeRollabckChan() {
 	if !c.RollbackRowsEventChanClosed {
 		c.RollbackRowsEventChanClosed = true
 		close(c.RollbackRowsEventChan)
-		seelog.Info("生成回滚sql通道关闭")
+		seelog.Info("Rollback SQL generation channel closed")
 	}
 	defer c.chanMU.Unlock()
 }
@@ -229,12 +229,12 @@ func (c *Creator) runProduceEvent(wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer c.Syncer.Close()
 
-	// 判断是否需要跳过, 位点
+	// Determine if skipping is needed, position
 	var isSkip bool
-	if c.GetStartPosType == START_POS_BY_TIME { // 如果开始位点是通过时间获取的就需要执行跳过
+	if c.GetStartPosType == START_POS_BY_TIME { // If start position is obtained through time, skipping needs to be executed
 		isSkip = true
 	}
-	seelog.Debugf("是否是需要跳过事件: %v", isSkip)
+	seelog.Debugf("Whether events need to be skipped: %v", isSkip)
 
 	pos := mysql.Position{Name: c.StartPosition.File, Pos: uint32(c.StartPosition.Position)}
 	streamer, err := c.Syncer.StartSync(pos)
@@ -243,11 +243,11 @@ func (c *Creator) runProduceEvent(wg *sync.WaitGroup) {
 		return
 	}
 produceLoop:
-	for { // 遍历event获取第二个可用的时间戳
+	for { // Iterate through events to get the second available timestamp
 		select {
 		case _, ok := <-c.Qiut:
 			if !ok {
-				seelog.Errorf("停止生成事件")
+				seelog.Errorf("Stop generating events")
 				break produceLoop
 			}
 		default:
@@ -257,14 +257,14 @@ produceLoop:
 				c.quit()
 			}
 
-			// 过去掉还没到开始时间的事件
+			// Skip events that haven't reached the start time yet
 			if isSkip {
-				// 判断是否到了开始时间
+				// Determine if the start time has been reached
 				if ev.Header.Timestamp < c.StartTimestamp {
 					continue
 				} else {
 					isSkip = false
-					seelog.Infof("停止跳过, 开始生成回滚sql. 时间戳: %d, 时间: %s, 位点: %s:%d", ev.Header.Timestamp,
+					seelog.Infof("Stop skipping, start generating rollback SQL. Timestamp: %d, Time: %s, Position: %s:%d", ev.Header.Timestamp,
 						utils.TS2String(int64(ev.Header.Timestamp), utils.TIME_FORMAT), c.StartPosition.File, ev.Header.LogPos)
 				}
 			}
@@ -411,7 +411,7 @@ func (c *Creator) runConsumeEventToOriSQL(wg *sync.WaitGroup) {
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
 			t, ok := c.RollBackTableMap[key]
 			if !ok {
-				seelog.Error("没有获取到表需要回滚的表信息(生成原sql数据的时候) %s.", key)
+				seelog.Error("Table rollback information not obtained (when generating original SQL data) %s.", key)
 				continue
 			}
 
@@ -447,7 +447,7 @@ func (c *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 
 	f, err := os.OpenFile(c.RollbackSQLFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("打开保存回滚sql文件失败. %s", c.RollbackSQLFile)
+		seelog.Errorf("Failed to open rollback SQL save file. %s", c.RollbackSQLFile)
 		c.quit()
 		return
 	}
@@ -459,7 +459,7 @@ func (c *Creator) runConsumeEventToRollbackSQL(wg *sync.WaitGroup) {
 			key := fmt.Sprintf("%s.%s", string(e.Table.Schema), string(e.Table.Table))
 			t, ok := c.RollBackTableMap[key]
 			if !ok {
-				seelog.Error("没有获取到表需要回滚的表信息(生成回滚sql数据的时候) %s.", key)
+				seelog.Error("Table rollback information not obtained (when generating rollback SQL data) %s.", key)
 				continue
 			}
 
@@ -609,7 +609,7 @@ func (c *Creator) writeOriDelete(
 	return nil
 }
 
-// 生成insert的回滚sql并切入文件
+// Generate rollback SQL for insert and write to file
 func (c *Creator) writeRollbackInsert(
 	ev *replication.RowsEvent,
 	f *os.File,
@@ -642,7 +642,7 @@ func (c *Creator) writeRollbackInsert(
 	return nil
 }
 
-// 生成update的回滚sql并切入文件
+// Generate rollback SQL for update and write to file
 func (c *Creator) writeRollbackUpdate(
 	ev *replication.RowsEvent,
 	f *os.File,
@@ -689,7 +689,7 @@ func (c *Creator) writeRollbackUpdate(
 	return nil
 }
 
-// 生成update的回滚sql并切入文件
+// Generate rollback SQL for delete and write to file
 func (c *Creator) writeRollbackDelete(
 	ev *replication.RowsEvent,
 	f *os.File,
@@ -734,11 +734,11 @@ func (c *Creator) getSqlFileName(prefix string) string {
 	items = append(items, c.DBC.Host)
 	items = append(items, strconv.FormatInt(int64(c.DBC.Port), 10))
 	items = append(items, prefix)
-	// 开始位点
+	// Start position
 	items = append(items, c.StartPosition.File)
 	items = append(items, strconv.FormatInt(int64(c.StartPosition.Position), 10))
 
-	// 结束位点或事件
+	// End position or event
 	if c.HaveEndPosition {
 		items = append(items, c.EndPosition.File)
 		items = append(items, strconv.FormatInt(int64(c.EndPosition.Position), 10))
@@ -746,7 +746,7 @@ func (c *Creator) getSqlFileName(prefix string) string {
 		items = append(items, utils.TS2String(int64(c.EndTimestamp), utils.TIME_FORMAT_FILE_NAME))
 	}
 
-	// 添加时间戳
+	// Add timestamp
 	items = append(items, strconv.FormatInt(time.Now().UnixNano()/10e6, 10))
 
 	items = append(items, ".sql")
@@ -754,14 +754,14 @@ func (c *Creator) getSqlFileName(prefix string) string {
 	return strings.Join(items, "_")
 }
 
-// 保存相关数据
+// Save related data
 func (c *Creator) saveInfo(complete bool) {
 	progress, progressInfo := c.getProgress(complete)
 
-	seelog.Warnf("进度: %f, 进度信息: %s", progress, progressInfo)
+	seelog.Warnf("Progress: %f, Progress info: %s", progress, progressInfo)
 }
 
-// 获取进度信息
+// Get progress information
 func (c *Creator) getProgress(complete bool) (float64, string) {
 	var progress float64
 	var progressInfo string
@@ -774,23 +774,23 @@ func (c *Creator) getProgress(complete bool) (float64, string) {
 		} else {
 			current = c.CurrentPosition.GetTotalNum() - c.StartPosition.GetTotalNum()
 		}
-		progressInfo = fmt.Sprintf("开始位点:%s, 当前位点:%s, 结束位点:%s", c.StartPosition.String(), c.CurrentPosition.String(), c.EndPosition.String())
+		progressInfo = fmt.Sprintf("Start position:%s, Current position:%s, End position:%s", c.StartPosition.String(), c.CurrentPosition.String(), c.EndPosition.String())
 	} else if c.HaveEndTime {
-		if c.CC.HaveStartTime() { // 有开始时间
+		if c.CC.HaveStartTime() { // Have start time
 			startTimestamp, err := utils.StrTime2Int(c.CC.StartTime)
 			if err != nil {
 				startTimestamp = 0
 			}
 			total = int64(c.EndTimestamp) - startTimestamp
 			current = int64(c.CurrentTimestamp) - startTimestamp
-			progressInfo = fmt.Sprintf("开始时间:%s, 当前时间:%s, 结束时间:%s", c.CC.StartTime, utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
-		} else { // 没有开始时间
+			progressInfo = fmt.Sprintf("Start time:%s, Current time:%s, End time:%s", c.CC.StartTime, utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
+		} else { // No start time
 			total = int64(c.EndTimestamp)
 			current = int64(c.CurrentTimestamp)
-			progressInfo = fmt.Sprintf("开始位点:%s, 当前时间:%s, 结束时间:%s", c.StartPosition.String(), utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
+			progressInfo = fmt.Sprintf("Start position:%s, Current time:%s, End time:%s", c.StartPosition.String(), utils.TS2String(int64(c.CurrentTimestamp), utils.TIME_FORMAT), c.CC.EndTime)
 		}
 	} else {
-		seelog.Errorf("无法获取到任务进度, 没有指定结束时间和结束位点")
+		seelog.Errorf("Unable to get task progress, no end time and end position specified")
 	}
 
 	if total != 0 {

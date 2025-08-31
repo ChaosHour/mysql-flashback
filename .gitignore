@@ -67,3 +67,11 @@ Dockerfile*
 .env
 .env.local
 offline_stat_output
+
+# bin directory 
+bin/
+rollback_sqls
+
+# sql and txt files
+*.sql
+*.txt

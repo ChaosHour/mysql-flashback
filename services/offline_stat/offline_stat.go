@@ -45,18 +45,18 @@ func NewOfflineStat(cfg *config.OfflineStatConfig) *OfflineStat {
 func (o *OfflineStat) Start() error {
 	for i, binlogFile := range o.OfflineStatCfg.BinlogFiles {
 		o.CurrentLogFile = binlogFile
-		seelog.Infof("开始解析Binlog: %v/%v, binlog文件: %v", i+i, len(o.OfflineStatCfg.BinlogFiles), binlogFile)
+		seelog.Infof("Starting to parse Binlog: %v/%v, binlog file: %v", i+i, len(o.OfflineStatCfg.BinlogFiles), binlogFile)
 
-		// 创建一个 BinlogParser 对象
+		// Create a BinlogParser object
 		parser := replication.NewBinlogParser()
 		if err := parser.ParseFile(binlogFile, 0, func(event *replication.BinlogEvent) error {
 			return o.handleEvent(event)
 		}); err != nil {
-			return fmt.Errorf("解析binlog出错. 进度: %v/%v, binlog文件: %v. %v", i+1, len(o.OfflineStatCfg.BinlogFiles), binlogFile, err)
+			return fmt.Errorf("Error parsing binlog. Progress: %v/%v, binlog file: %v. %v", i+1, len(o.OfflineStatCfg.BinlogFiles), binlogFile, err)
 		}
 	}
 
-	// 将统计信息输出到文件中
+	// Output statistics to file
 	o.statToFile()
 
 	return nil
@@ -227,7 +227,7 @@ func (o *OfflineStat) statToFile() {
 	o.XidStatToFile()
 }
 
-// 表统计信息写入到文件中
+// Write table statistics to file
 func (o *OfflineStat) tableStatToFile() {
 	stats := make([]*TableBinlogStat, 0, len(o.TotalTableStatMap))
 	for _, stat := range o.TotalTableStatMap {
@@ -241,15 +241,15 @@ func (o *OfflineStat) tableStatToFile() {
 	filename := o.OfflineStatCfg.TableStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("将(表)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
+		seelog.Errorf("Error writing (table) statistics to file. Error opening file. File: %v. %v", filename, err)
 		return
 	}
 	defer f.Close()
 
 	for _, stat := range stats {
-		if _, err := f.WriteString(fmt.Sprintf("表: %v.%v \tdml影响行数: %v, insert: %v, update: %v, delete: %v, 表出现次数: %v\n",
+		if _, err := f.WriteString(fmt.Sprintf("Table: %v.%v \tdml affected rows: %v, insert: %v, update: %v, delete: %v, table occurrence count: %v\n",
 			stat.SchemaName, stat.TableName, stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.AppearCount)); err != nil {
-			seelog.Errorf("写入(表)统计信息出错. 文件: %v. 表: %v.%v, %v", filename, stat.SchemaName, stat.TableName, err)
+			seelog.Errorf("Error writing (table) statistics. File: %v. Table: %v.%v, %v", filename, stat.SchemaName, stat.TableName, err)
 			return
 		}
 	}
@@ -268,15 +268,15 @@ func (o *OfflineStat) threadStatToFile() {
 	filename := o.OfflineStatCfg.ThreadStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("将(thread)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
+		seelog.Errorf("Error writing (thread) statistics to file. Error opening file. File: %v. %v", filename, err)
 		return
 	}
 	defer f.Close()
 
 	for _, stat := range stats {
-		if _, err := f.WriteString(fmt.Sprintf("threadId: %v\tdml影响行数: %v, insert: %v, update: %v, delete: %v, 表出现次数: %v\n",
+		if _, err := f.WriteString(fmt.Sprintf("threadId: %v\tdml affected rows: %v, insert: %v, update: %v, delete: %v, table occurrence count: %v\n",
 			stat.ThreadId, stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.AppearCount)); err != nil {
-			seelog.Errorf("写入(thread)统计信息出错. 文件: %v. ThreadId: %v, %v", filename, stat.ThreadId, err)
+			seelog.Errorf("Error writing (thread) statistics. File: %v. ThreadId: %v, %v", filename, stat.ThreadId, err)
 			return
 		}
 	}
@@ -286,15 +286,15 @@ func (o *OfflineStat) TimestampStatToFile() {
 	filename := o.OfflineStatCfg.TimestampStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("将(时间)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
+		seelog.Errorf("Error writing (time) statistics to file. Error opening file. File: %v. %v", filename, err)
 		return
 	}
 	defer f.Close()
 
 	for _, stat := range o.TotalTimestampStats {
-		if _, err := f.WriteString(fmt.Sprintf("%v: dml影响行数: %v, insert: %v, update: %v, delete: %v, 事务数: %v, 开始位点: %v\n",
+		if _, err := f.WriteString(fmt.Sprintf("%v: dml affected rows: %v, insert: %v, update: %v, delete: %v, transaction count: %v, start position: %v\n",
 			utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.TxCount, stat.FilePos())); err != nil {
-			seelog.Errorf("写入(时间)统计信息出错. 文件: %v. %v. 开始位点: %v. %v", filename, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)
+			seelog.Errorf("Error writing (time) statistics. File: %v. %v. Start position: %v. %v", filename, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)
 			return
 		}
 	}
@@ -304,15 +304,15 @@ func (o *OfflineStat) XidStatToFile() {
 	filename := o.OfflineStatCfg.TransactionStatFilePath()
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		seelog.Errorf("将(xid)统计信息写入文件出错. 打开文件出错. 文件: %v. %v", filename, err)
+		seelog.Errorf("Error writing (xid) statistics to file. Error opening file. File: %v. %v", filename, err)
 		return
 	}
 	defer f.Close()
 
 	for _, stat := range o.TotalTransactionStats {
-		if _, err := f.WriteString(fmt.Sprintf("Xid: %v \t%v \t dml影响行数: %v, insert: %v, update: %v, delete: %v, 开始位点: %v\n",
+		if _, err := f.WriteString(fmt.Sprintf("Xid: %v \t%v \t dml affected rows: %v, insert: %v, update: %v, delete: %v, start position: %v\n",
 			stat.Xid, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.DmlCount(), stat.InsertCount, stat.UpdateCount, stat.DeleteCount, stat.FilePos())); err != nil {
-			seelog.Errorf("写入(xid)统计信息出错. 文件: %v. Xid: %v, %v. 开始位点: %v. %v", filename, stat.Xid, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)
+			seelog.Errorf("Error writing (xid) statistics. File: %v. Xid: %v, %v. Start position: %v. %v", filename, stat.Xid, utils.TS2String(int64(stat.Timestamp), utils.TIME_FORMAT), stat.FilePos(), err)
 			return
 		}
 	}

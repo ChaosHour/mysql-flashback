@@ -2,10 +2,11 @@ package config
 
 import (
 	"fmt"
-	"github.com/cihub/seelog"
-	"github.com/ChaosHour/mysql-flashback/utils"
 	"strings"
 	"time"
+
+	"github.com/ChaosHour/mysql-flashback/utils"
+	"github.com/cihub/seelog"
 )
 
 type OfflineConfig struct {
@@ -47,7 +48,7 @@ func (o *OfflineConfig) Check() error {
 		return err
 	}
 
-	if err := utils.CheckAndCreatePath(o.GetSaveDir(), "回滚文件存放路径"); err != nil {
+	if err := utils.CheckAndCreatePath(o.GetSaveDir(), "rollback file storage path"); err != nil {
 		return err
 	}
 
@@ -56,29 +57,29 @@ func (o *OfflineConfig) Check() error {
 
 func (o *OfflineConfig) checkCondition() error {
 	if len(o.BinlogFiles) == 0 {
-		return fmt.Errorf("请输入离线 binlog 文件名以及路径")
+		return fmt.Errorf("please enter offline binlog file names and paths")
 	}
 
 	for _, fileName := range o.BinlogFiles {
 		ok, err := utils.PathExists(fileName)
 		if err != nil {
-			return fmt.Errorf("检测离线 binlog 文件是否存在出错, %v", err)
+			return fmt.Errorf("error checking if offline binlog file exists, %v", err)
 		}
 		if !ok {
-			return fmt.Errorf("离线 binlog 文件不存在, %v", fileName)
+			return fmt.Errorf("offline binlog file does not exist, %v", fileName)
 		}
 	}
 
 	if strings.TrimSpace(o.SchemaFile) == "" {
-		return fmt.Errorf("请指定相关表结构文件")
+		return fmt.Errorf("please specify the related table structure file")
 	}
 
 	ok, err := utils.PathExists(o.SchemaFile)
 	if err != nil {
-		return fmt.Errorf("检测离线 表结构文件 是否存在出错, %v", err)
+		return fmt.Errorf("error checking if offline table structure file exists, %v", err)
 	}
 	if !ok {
-		return fmt.Errorf("表结构文件不存在, %v", o.SchemaFile)
+		return fmt.Errorf("table structure file does not exist, %v", o.SchemaFile)
 	}
 
 	return nil

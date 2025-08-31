@@ -2,8 +2,9 @@ package visitor
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/pkg/parser"
 	"testing"
+
+	"github.com/pingcap/tidb/pkg/parser"
 )
 
 func TestParseSelect_01(t *testing.T) {
@@ -14,7 +15,7 @@ select emp_no, birth_date from employees.emp
 	ps := parser.New()
 	_, _, err := ps.Parse(querys, "", "")
 	if err != nil {
-		t.Fatalf("sql语法解析错误: %s", err.Error())
+		t.Fatalf("sql syntax parsing error: %s", err.Error())
 	}
 }
 

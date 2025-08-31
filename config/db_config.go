@@ -14,14 +14,14 @@ const (
 	DB_HOST                = "127.0.0.1"
 	DB_PORT                = 3306
 	DB_USERNAME            = "root"
-	DB_PASSWORD            = "root"
+	DB_PASSWORD            = "s3cr3t"
 	DB_SCHEMA              = ""
 	DB_AUTO_COMMIT         = true
 	DB_MAX_OPEN_CONNS      = 8
 	DB_MAX_IDEL_CONNS      = 8
 	DB_CHARSET             = "utf8mb4"
 	DB_TIMEOUT             = 10
-	DB_PASSWORD_IS_DECRYPT = true
+	DB_PASSWORD_IS_DECRYPT = false
 	SQL_LOG_BIN            = true
 )
 

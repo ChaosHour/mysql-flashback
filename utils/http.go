@@ -129,21 +129,21 @@ func GetURLRaw(url string, query string) ([]byte, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("code: %d. 访问pili失败. %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("code: %d. failed to access pili. %s", resp.StatusCode, string(body))
 	}
 
 	return body, nil
 }
 
-// 判断访问数据是否成功
+// Check if access data is successful
 func visitOk(resp *http.Response) (interface{}, error) {
 	d, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("获取返回数据失败. %v", err)
+		return nil, fmt.Errorf("failed to get response data. %v", err)
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("code: %d. 访问失败. %s", resp.StatusCode, string(d))
+		return nil, fmt.Errorf("code: %d. access failed. %s", resp.StatusCode, string(d))
 	}
 
 	result := new(responseData)
