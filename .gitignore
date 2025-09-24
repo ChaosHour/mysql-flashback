@@ -75,4 +75,4 @@ rollback_sqls
 # sql and txt files
 *.sql
 *.txt
-*.sh
+progress_tracker.sh
